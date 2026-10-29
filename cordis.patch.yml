@@ -1,0 +1,8 @@
+# dsh-pet-plus 的 bundle patch —— 把桌宠挂进 DSH 配置树
+#
+# id 必须全局唯一且与包名一致（DSH 商城预检按它比对 entry id）；
+# name 解析包入口 lib/index.js；package.json 的 dsh.client 让 DSH 同时把
+# 本包扫描为浏览器插件，提供 /plugins/dsh-pet-plus/client.js。
+- insert:
+    - id: dsh-pet-plus
+      name: 'dsh-pet-plus'

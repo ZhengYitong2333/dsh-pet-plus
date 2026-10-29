@@ -1,0 +1,38 @@
+# build output
+lib/
+dist/
+*.tsbuildinfo
+
+# deps / caches
+node_modules/
+.pnpm-store/
+.npm-cache/
+.npm-logs/
+.dsh-types/
+
+# local plugin data (never commit)
+main-config.jsonc
+main-config.json
+memory.json
+profile.json
+episodes.jsonl
+input-history.json
+budget.json
+metrics.json
+traces/
+backups/
+chrome-profile/
+/sounds/
+content-log.jsonl
+
+# secrets / env
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.keystore
+
+# misc
+.DS_Store
+*.log

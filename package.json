@@ -1,0 +1,114 @@
+{
+  "name": "dsh-pet-plus",
+  "version": "0.1.0",
+  "description": "会记住你的桌宠：四层长期记忆、微信/QQ 双通道、抖音/小红书内容副驾、快捷键三候选。基于 dsh-pet 的独立 DSH 插件。",
+  "icon": "assets/logo.png",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "desktop-pet",
+    "pet",
+    "memory",
+    "floating-widget",
+    "web-ui",
+    "cordis",
+    "react"
+  ],
+  "homepage": "https://github.com/ZhengYitong2333/dsh-pet-plus#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ZhengYitong2333/dsh-pet-plus.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ZhengYitong2333/dsh-pet-plus/issues"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./src/*": "./src/*",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "assets/webm",
+    "assets/fonts",
+    "assets/pic",
+    "assets/memes",
+    "assets/config.jsonc",
+    "assets/logo.png",
+    "runtime/electron-helper",
+    "cordis.patch.yml",
+    "NOTICE.md",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rm -rf lib && tsdown && node scripts/postbuild.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test \"src/**/*.test.ts\"",
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "prepare:types": "node scripts/link-dsh-types.mjs",
+    "gen:gifs": "node scripts/gen-gifs.mjs",
+    "prepack": "npm run build && npm run check:secrets"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "devDependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "tsdown": "^0.23.3",
+    "typescript": "^5.9.0",
+    "@electron/get": "^5.1.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-agent-default-model": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-connection": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-commands": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-credentials": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-home-paths": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-host-webserver": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-llm": "^0.2.0-rc.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "compatibility": {
+      "dshReleases": {
+        "0.2.1-rc.2": "compatible",
+        "0.2.1-rc.3": "compatible"
+      }
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection"
+      ],
+      "platform": "web"
+    }
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@ffmpeg-installer/darwin-arm64",
+      "@ffmpeg-installer/linux-x64",
+      "@ffmpeg-installer/win32-x64",
+      "@ffmpeg-installer/darwin-x64"
+    ]
+  }
+}
