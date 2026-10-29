@@ -41,7 +41,16 @@
     });
   }
 
-  if (bridge && bridge.onSuggestData) bridge.onSuggestData(render);
+  const demo = new URLSearchParams(location.search).has('demo');
+  if (demo) {
+    render([
+      '帮我把今天的会议纪要整理成三点',
+      '根据我最近在做的记忆模块，列一个回归测试清单',
+      '用更轻松的语气给团队发个进度更新',
+    ]);
+  } else if (bridge && bridge.onSuggestData) {
+    bridge.onSuggestData(render);
+  }
   if (close) close.addEventListener('click', closeSelf);
 
   window.addEventListener('keydown', (event) => {

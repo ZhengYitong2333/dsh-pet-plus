@@ -68,7 +68,8 @@
     "prepare:types": "node scripts/link-dsh-types.mjs",
     "gen:gifs": "node scripts/gen-gifs.mjs",
     "prepack": "npm run build && node scripts/prepack-check.js && npm run check:secrets",
-    "start:desktop": "node scripts/start-desktop.mjs"
+    "start:desktop": "node scripts/start-desktop.mjs",
+    "gen:preview": "node scripts/gen-preview.mjs"
   },
   "license": "MIT",
   "engines": {

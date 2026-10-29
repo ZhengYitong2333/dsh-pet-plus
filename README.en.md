@@ -64,6 +64,11 @@ Desktop mode also registers a true global hotkey `⌘/Ctrl+Alt+Shift+K` (overrid
 - drag text or paste anywhere outside an editor → summarize / translate / explain / turn into a comment;
 - 📷 captures the screen, copies it and pastes it into the DSH composer so a multimodal model can explain it.
 
+<p align="center">
+  <img src="docs/assets/companion.png" alt="Companion panel" width="360">
+  <img src="docs/assets/global-hotkey.png" alt="Global hotkey suggestions" width="360">
+</p>
+
 ## Install
 
 ```bash

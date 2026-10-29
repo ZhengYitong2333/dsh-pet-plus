@@ -130,7 +130,12 @@ flowchart LR
 | 记忆时间线 | 「记忆」tab，L1 情节 + L2 画像按时间倒序 |
 | 点击音效 / 点击余额 | 每只宠物独立开关，60 秒冷却 |
 
-> 伴侣面板快捷键：`⌘/Ctrl + Alt + J`；三候选：`⌘/Ctrl + Alt + K`。
+> 伴侣面板快捷键：`⌘/Ctrl + Alt + J`；三候选：`⌘/Ctrl + Alt + K`；桌面全局热键：`⌘/Ctrl + Alt + Shift + K`。
+
+<p align="center">
+  <img src="docs/assets/companion.png" alt="伴侣面板" width="360">
+  <img src="docs/assets/global-hotkey.png" alt="全局热键三候选" width="360">
+</p>
 
 ---
 
