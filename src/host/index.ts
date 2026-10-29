@@ -109,6 +109,7 @@ import { createMemoryService } from './memory/service';
 import { createSessionRecall, type SessionQueryLike } from './memory/sessions';
 import { createMemoryTools, hasRecallIntent } from './memory/tools';
 import { InputHistoryStore } from './memory/input-history';
+import { extractInputProfile, shouldExtractInputProfile } from './memory/input-profile';
 import { generateSuggestions, SuggestCache } from './suggest';
 import { readJsonFile, writeJsonAtomic } from './memory/store';
 import { ImService, imConfigOf } from './im/index';
@@ -2690,30 +2691,6 @@ export function apply(ctx: any): void {
       return { kind: 'json', status: 200, obj: { ok: true, ...memoryService.stats(cfg.main ?? {}) } };
     }
 
-    // 输入历史：只收用户真实输入（source.kind === 'user'），脱敏后进环形缓冲。
-  ctx.effect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 事件载荷无静态类型
-    const dispose = ctx.on('session/event', (session: any, event: any) => {
-      if (event?.type !== 'user/message') return;
-      const data = event.data as { source?: { kind?: string }; content?: unknown } | undefined;
-      if (data?.source?.kind !== 'user') return;
-      const text = Array.isArray(data.content)
-        ? data.content
-            .map((block: { type?: string; text?: string }) =>
-              block?.type === 'text' && typeof block.text === 'string' ? block.text : '',
-            )
-            .filter(Boolean)
-            .join('\n')
-        : '';
-      if (!text.trim()) return;
-      const sessionId = String(session?.header?.id ?? session?.id ?? 'unknown');
-      const cfg = readAllConfig(configPaths);
-      const settings = memoryService.settings(cfg.main ?? {});
-      if (!settings.inputHistory.enabled) return;
-      inputHistory.record(sessionId, text, settings.inputHistory);
-    });
-    return () => dispose?.();
-  }, 'dsh-pet-plus: input history');
 
   // 对话：/dsh-pet-plus/chat?pet=<id>
     //   GET  —— 最近记忆窗口（截尾 chatMemoryRounds 轮），弹窗打开时展示（一次性读，不是轮询）
@@ -2910,6 +2887,83 @@ export function apply(ctx: any): void {
     if (file === undefined) return { kind: 'text', status: 404, body: 'dsh-pet: asset not found' };
     return { kind: 'file', file, contentType: MIME[servedExt] ?? 'application/octet-stream' };
   };
+
+  // 输入历史 + 输入画像：只收用户真实输入（source.kind === 'user'），脱敏后进环形缓冲；
+  // 每 N 条触发一次低成本提炼，把稳定偏好写进 L2（失败静默，绝不阻塞输入）。
+  let extractingInputProfile = false;
+  const maybeExtractInputProfile = (): void => {
+    if (extractingInputProfile) return;
+    const settings = memoryService.settings(readAllConfig(configPaths).main ?? {});
+    if (!settings.inputHistory.enabled) return;
+    const stats = inputHistory.stats();
+    const prompts = inputHistory.since(stats.lastExtractAt);
+    if (
+      !shouldExtractInputProfile({
+        enabled: settings.inputHistory.enabled,
+        promptsSinceLast: prompts.length,
+        every: settings.inputHistory.extractEveryPrompts,
+        lastExtractAt: stats.lastExtractAt,
+        now: Date.now(),
+      })
+    ) {
+      return;
+    }
+    const selection = settings.model.provider && settings.model.model
+      ? settings.model
+      : ctx.agentDefaultModel.currentSelection();
+    if (!selection.provider || !selection.model) return;
+    const limits = { calls: settings.dailyCalls, tokens: settings.dailyTokens };
+    const estimate = 900 + prompts.length * 80;
+    if (!memoryService.budget.canSpend(estimate, limits)) return;
+    extractingInputProfile = true;
+    void (async () => {
+      try {
+        const result = await extractInputProfile(
+          { llm: ctx.llm, selection },
+          prompts.slice(-20).map((p) => p.text),
+        );
+        memoryService.budget.consume('input-profile', result.ok ? result.tokens : estimate, limits);
+        inputHistory.markExtracted();
+        if (result.ok && result.facts.length > 0) {
+          for (const fact of result.facts) {
+            await memoryService.profile.add({
+              text: fact.text,
+              layer: fact.layer,
+              importance: fact.importance,
+              source: 'auto-input',
+            });
+          }
+        }
+      } catch (error) {
+        ctx.logger?.warn?.('[dsh-pet-plus] 输入画像提炼失败：' + (error instanceof Error ? error.message : String(error)));
+      } finally {
+        extractingInputProfile = false;
+      }
+    })();
+  };
+
+  ctx.effect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 事件载荷无静态类型
+    const dispose = ctx.on('session/event', (session: any, event: any) => {
+      if (event?.type !== 'user/message') return;
+      const data = event.data as { source?: { kind?: string }; content?: unknown } | undefined;
+      if (data?.source?.kind !== 'user') return;
+      const text = Array.isArray(data.content)
+        ? data.content
+            .map((block: { type?: string; text?: string }) =>
+              block?.type === 'text' && typeof block.text === 'string' ? block.text : '',
+            )
+            .filter(Boolean)
+            .join('\n')
+        : '';
+      if (!text.trim()) return;
+      const sessionId = String(session?.header?.id ?? session?.id ?? 'unknown');
+      const settings = memoryService.settings(readAllConfig(configPaths).main ?? {});
+      if (!settings.inputHistory.enabled) return;
+      if (inputHistory.record(sessionId, text, settings.inputHistory)) maybeExtractInputProfile();
+    });
+    return () => dispose?.();
+  }, 'dsh-pet-plus: input history');
 
   ctx.effect(
     () =>

@@ -95,6 +95,22 @@ export class InputHistoryStore {
     return this.load().prompts.slice(-Math.max(0, n));
   }
 
+  /** 上次提炼之后新增的输入（lastExtractAt 之前的一律不算）。 */
+  since(ts: number): InputPrompt[] {
+    return this.load().prompts.filter((p) => p.ts > ts);
+  }
+
+  /** 标记一次提炼完成，避免每次输入都调用模型。 */
+  markExtracted(at = this.clock().getTime()): void {
+    const state = this.load();
+    state.stats.lastExtractAt = at;
+    try {
+      writeJsonAtomic(this.file, state);
+    } catch (error) {
+      console.warn('[dsh-pet-plus] 输入历史写盘失败：' + String(error));
+    }
+  }
+
   stats(): { count: number; seen: number; lastExtractAt: number } {
     const state = this.load();
     return { count: state.prompts.length, seen: state.stats.seen, lastExtractAt: state.stats.lastExtractAt };

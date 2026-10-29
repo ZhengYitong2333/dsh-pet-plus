@@ -29,6 +29,21 @@ test('记录/最近/清空/上限', () => {
   }
 });
 
+test('since 与 markExtracted：只取上次提炼后的输入', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-pet-plus-input-'));
+  try {
+    const h = new InputHistoryStore(join(dir, 'input-history.json'), () => new Date(1_700_000_000_000));
+    h.record('s1', '第一条足够长的输入', settings);
+    h.record('s1', '第二条足够长的输入', settings);
+    assert.equal(h.since(0).length, 2);
+    h.markExtracted(1_700_000_000_000);
+    assert.equal(h.since(1_700_000_000_000).length, 0);
+    assert.equal(h.stats().lastExtractAt, 1_700_000_000_000);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('关闭后不记录', () => {
   const dir = mkdtempSync(join(tmpdir(), 'dsh-pet-plus-input-'));
   try {
