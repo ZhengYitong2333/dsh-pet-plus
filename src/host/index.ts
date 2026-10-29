@@ -105,6 +105,7 @@ import { listBalanceProviders, queryBalance, registerBalanceProvider } from './b
 import { generateWhisper } from './whisper';
 import { automaticWhisperSchedule } from './whisper-policy';
 import { generateChat, type ChatMemoryMessage } from './chat';
+import { createMemoryService } from './memory/service';
 import { configuredModel } from './model-selection';
 import { limitPool, pickMeme, readMemePool } from './memes';
 import {
@@ -312,6 +313,8 @@ export function apply(ctx: any): void {
   // 用户数据根：配置与用户素材统一收敛于此（扩展包按 <插件id> 各自建目录）
   const dshHome = resolveDshHome();
   const userRoot = join(dshHome, 'dsh-pet-plus');
+  // 长期记忆服务（L3 指令层先行；L1/L2 后续接入）
+  const memoryService = createMemoryService(userRoot);
   // 用户主配置（可编辑层）与文件宠物目录；配置读取/合并统一走 readAllConfig（./config）。
   // 主配置是 **JSONC**（main-config.jsonc）——与包内默认 config.jsonc 同名同格式：
   // 「同步」写进去的就是带注释的原文，扩展名如实反映内容（旧版 main-config.json 只读回落 + 启动迁移）
@@ -719,13 +722,17 @@ export function apply(ctx: any): void {
    *
    *  收 `findPetInstance` 的**命中结果**而不是 `(petId, cfg)`：两个调用方都已经解析过了，这里再查一次
    *  只会多出一处"查不到就兜底 main"的不可达分支。 */
-  const petSystemPrompt = (found: { conf: Record<string, unknown>; pet: Record<string, unknown> }): string =>
-    composeSystemPrompt({
+  const petSystemPrompt = (found: { conf: Record<string, unknown>; pet: Record<string, unknown> }): string => {
+    const base = composeSystemPrompt({
       prompt: petPersona(found.conf, found.pet),
       name: String(found.pet.name ?? ''),
       id: String(found.pet.id ?? ''),
       now: new Date(),
     });
+    // L3 指令层（用户手写）；空/关闭时字符串与基座逐字节一致
+    const block = memoryService.render(found.conf);
+    return block === '' ? base : base + '\n\n' + block;
+  };
 
   /** 对话记忆轮数（1 轮 = 1 问 1 答）：该宠物**所属条目**的 chatMemoryRounds（合并器已填默认非负数字）。
    *  同样收**已解析的条目配置**：两个调用方都已经拿到 `findPetInstance` 的结果。 */
@@ -2069,6 +2076,57 @@ export function apply(ctx: any): void {
         }
         signal?.addEventListener('abort', onAbort, { once: true });
       });
+    }
+
+    // 长期记忆（L3 指令层）：GET/PUT /memory/instructions；GET /memory/stats
+    // 只读写用户手写层；L2/L1 的 CRUD 在后续阶段接入同一前缀。
+    if (rest === 'memory/instructions') {
+      if (method === 'GET') {
+        return { kind: 'json', status: 200, obj: { ok: true, ...memoryService.instructions.read() } };
+      }
+      if (method !== 'PUT' && method !== 'POST') {
+        return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      }
+      let parsed: Record<string, unknown> = {};
+      try {
+        parsed = (JSON.parse(body ?? '{}') as Record<string, unknown>) ?? {};
+      } catch {
+        return { kind: 'json', status: 400, obj: { ok: false, reason: 'bad-request', message: '请求体不是合法 JSON' } };
+      }
+      const text = typeof parsed.text === 'string' ? parsed.text : '';
+      const expected = Number(parsed.expectedVersion);
+      const result = memoryService.instructions.save(
+        text,
+        Number.isFinite(expected) ? expected : undefined,
+      );
+      if (!result.ok) {
+        return {
+          kind: 'json',
+          status: result.reason === 'conflict' ? 409 : 400,
+          obj: { ok: false, reason: result.reason, current: result.current },
+        };
+      }
+      return { kind: 'json', status: 200, obj: { ok: true, ...result.snapshot } };
+    }
+    if (rest === 'memory/instructions/clear') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let clearBody: Record<string, unknown> = {};
+      try {
+        clearBody = (JSON.parse(body ?? '{}') as Record<string, unknown>) ?? {};
+      } catch {
+        return { kind: 'json', status: 400, obj: { ok: false, reason: 'bad-request', message: '请求体不是合法 JSON' } };
+      }
+      const expected = Number(clearBody.expectedVersion);
+      const result = memoryService.instructions.clear(Number.isFinite(expected) ? expected : undefined);
+      if (!result.ok) {
+        return { kind: 'json', status: 409, obj: { ok: false, reason: result.reason, current: result.current } };
+      }
+      return { kind: 'json', status: 200, obj: { ok: true, ...result.snapshot } };
+    }
+    if (rest === 'memory/stats') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const cfg = readAllConfig(configPaths);
+      return { kind: 'json', status: 200, obj: { ok: true, ...memoryService.stats(cfg.main ?? {}) } };
     }
 
     // 对话：/dsh-pet-plus/chat?pet=<id>
