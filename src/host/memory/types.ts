@@ -67,16 +67,19 @@ export interface MemorySettings {
   extractEveryTurns: number;
   /** 规则预筛（省钱） */
   prefilter: boolean;
-  inputHistory: {
-    enabled: boolean;
-    maxPrompts: number;
-    extractEveryPrompts: number;
-    ttlDays: number;
-  };
+  inputHistory: InputHistorySettings;
   compress: {
     afterRounds: number;
     keepRecentRounds: number;
   };
+}
+
+/** 输入历史设置 */
+export interface InputHistorySettings {
+  enabled: boolean;
+  maxPrompts: number;
+  extractEveryPrompts: number;
+  ttlDays: number;
 }
 
 /** 预算快照 */

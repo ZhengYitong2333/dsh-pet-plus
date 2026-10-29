@@ -108,6 +108,8 @@ import { generateChat, type ChatMemoryMessage } from './chat';
 import { createMemoryService } from './memory/service';
 import { createSessionRecall, type SessionQueryLike } from './memory/sessions';
 import { createMemoryTools, hasRecallIntent } from './memory/tools';
+import { InputHistoryStore } from './memory/input-history';
+import { generateSuggestions, SuggestCache } from './suggest';
 import { configuredModel } from './model-selection';
 import { limitPool, pickMeme, readMemePool } from './memes';
 import {
@@ -318,6 +320,8 @@ export function apply(ctx: any): void {
   // 长期记忆服务（L3 指令层先行；L1/L2 后续接入）
   const memoryService = createMemoryService(userRoot);
   // L0：DSH 会话检索（可选服务；默认关闭时降级为 unavailable）
+  const inputHistory = new InputHistoryStore(join(userRoot, 'input-history.json'));
+  const suggestCache = new SuggestCache();
   const sessionRecall = createSessionRecall(
     () => {
       try {
@@ -2119,6 +2123,54 @@ export function apply(ctx: any): void {
       });
     }
 
+    // 输入历史：预览 / 清空
+    if (rest === 'memory/input-history') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit') ?? 50)));
+      return { kind: 'json', status: 200, obj: { ok: true, prompts: inputHistory.recent(limit), stats: inputHistory.stats() } };
+    }
+    if (rest === 'memory/input-history/clear') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      inputHistory.clear();
+      return { kind: 'json', status: 200, obj: { ok: true } };
+    }
+
+    // 快捷键三候选：POST /suggest { pet? }
+    if (rest === 'suggest') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let req: Record<string, unknown> = {};
+      try {
+        req = (JSON.parse(body ?? '{}') as Record<string, unknown>) ?? {};
+      } catch {
+        return { kind: 'json', status: 400, obj: { ok: false, reason: 'bad-request', message: '请求体不是合法 JSON' } };
+      }
+      const cfg = readAllConfig(configPaths);
+      const petId = String(req.pet ?? '') || flattenPetList(cfg)[0]?.id?.toString() || '';
+      const found = petId ? findPetInstance(cfg, petId) : undefined;
+      if (!found) return { kind: 'json', status: 200, obj: { ok: false, reason: 'unknown-pet' } };
+      const settings = memoryService.settings(found.conf);
+      if (!settings.enabled) return { kind: 'json', status: 200, obj: { ok: false, reason: 'disabled' } };
+      const recent = inputHistory.recent(10).map((p) => p.text);
+      const query = recent[recent.length - 1] ?? '';
+      const recalled = query ? memoryService.profile.search(query, 4) : memoryService.profile.list().slice(0, 4);
+      const memories = recalled.map((e) => e.text);
+      const key = petId + ':' + Math.floor(Date.now() / 600_000) + ':' + recent.slice(-2).join('|') + ':' + memories.join('|');
+      const refresh = req.refresh === true;
+      const cached = refresh ? undefined : suggestCache.get(key);
+      if (cached) return { kind: 'json', status: 200, obj: { ok: true, ...cached, cached: true } };
+      const limits = { calls: settings.dailyCalls, tokens: settings.dailyTokens };
+      const canSpend = memoryService.budget.canSpend(300, limits);
+      const result = canSpend
+        ? await generateSuggestions(ctx, { system: petSystemPrompt(found), recent, memories })
+        : { ok: true as const, options: ['帮我梳理一下现在的进展', '根据我的偏好给点建议', '把刚才的结论压缩成三点'], source: 'template' as const };
+      if (!result.ok) {
+        return { kind: 'json', status: 200, obj: { ok: false, reason: result.reason, message: result.message } };
+      }
+      if (canSpend) memoryService.budget.consume('suggest', 300, limits);
+      suggestCache.set(key, result.options, result.source);
+      return { kind: 'json', status: 200, obj: { ok: true, options: result.options, source: result.source, cached: false } };
+    }
+
     // L2 长期记忆：/memory/profile（列表/新增）、/memory/profile/<id>（改/删/恢复）、/memory/search
     if (rest === 'memory/profile') {
       if (method === 'GET') {
@@ -2286,7 +2338,32 @@ export function apply(ctx: any): void {
       return { kind: 'json', status: 200, obj: { ok: true, ...memoryService.stats(cfg.main ?? {}) } };
     }
 
-    // 对话：/dsh-pet-plus/chat?pet=<id>
+    // 输入历史：只收用户真实输入（source.kind === 'user'），脱敏后进环形缓冲。
+  ctx.effect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 事件载荷无静态类型
+    const dispose = ctx.on('session/event', (session: any, event: any) => {
+      if (event?.type !== 'user/message') return;
+      const data = event.data as { source?: { kind?: string }; content?: unknown } | undefined;
+      if (data?.source?.kind !== 'user') return;
+      const text = Array.isArray(data.content)
+        ? data.content
+            .map((block: { type?: string; text?: string }) =>
+              block?.type === 'text' && typeof block.text === 'string' ? block.text : '',
+            )
+            .filter(Boolean)
+            .join('\n')
+        : '';
+      if (!text.trim()) return;
+      const sessionId = String(session?.header?.id ?? session?.id ?? 'unknown');
+      const cfg = readAllConfig(configPaths);
+      const settings = memoryService.settings(cfg.main ?? {});
+      if (!settings.inputHistory.enabled) return;
+      inputHistory.record(sessionId, text, settings.inputHistory);
+    });
+    return () => dispose?.();
+  }, 'dsh-pet-plus: input history');
+
+  // 对话：/dsh-pet-plus/chat?pet=<id>
     //   GET  —— 最近记忆窗口（截尾 chatMemoryRounds 轮），弹窗打开时展示（一次性读，不是轮询）
     //   POST —— 携带历史生成回复并写入记忆；回 {ok,text,image?}，回复同样写 S 的 pets.<id>.say
     // 记忆唯一读写方 = host（memory.json；浏览器/桌面两端都只是客户端）→

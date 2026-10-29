@@ -8,6 +8,7 @@ import { makePetConfigSection, NS, zh, en, petBridge } from './settings';
 import { initNotify } from './notify';
 import { installCommandFaces, type CommandFace, type CommandUiLike } from './command-faces';
 import { installSectionNavIcon } from './nav-icon';
+import { installSuggest } from './suggest';
 import type * as ReactNS from 'react';
 import type * as PrimitivesNS from '@deepseek-ai/dsh-client-ui-primitives';
 
@@ -63,7 +64,7 @@ export function makeFactory(): (require: (mod: string) => any) => any {
     const name = 'pet';
     // commandUi 写成服务依赖（与官方 client-ui-permission-presets 的写法一致）：
     // 让 cordis 等「/」命令入口服务就绪后才 apply 本插件，保证 /pet 装饰必然注册成功。
-    const inject = ['slots', 'locale', 'connection', 'remote', 'remote.commands', 'commandUi'];
+    const inject = ['slots', 'locale', 'connection', 'remote', 'remote.commands', 'commandUi', 'sessions', 'conversation'];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 注入的 ctx（locale/slots/webServer 等 service 无静态类型）
     function apply(ctx: any) {
       // 本地化字典（设置页文案）
@@ -166,6 +167,9 @@ export function makeFactory(): (require: (mod: string) => any) => any {
         }
         return installSectionNavIcon({ label: () => t('nav'), renderSvg: () => renderIcon(icon) });
       }, 'dsh-pet: settings nav icon');
+
+      // 快捷键三候选（Mod+Alt+K）：会话探针 + 弹层 + 填入输入框
+      ctx.effect(() => installSuggest(ctx as never), 'dsh-pet-plus: suggest');
 
       // 宠物 overlay（多开：容器渲染多个 PetCard）
       ctx.slots.inject('shell.overlay', function* () {
