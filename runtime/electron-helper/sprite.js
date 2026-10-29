@@ -265,7 +265,8 @@ class PetSprite {
     // 注意：退订由窗口销毁自然回收（webContents 销毁后 ipc 事件不再派发），无需显式取消。
     this.others = {}; // petId -> {x,y,vx,vy,size,bottomPad}（其它宠物的最新状态，来自主进程广播）
     this.throwState = null; // 飞行中的实时状态（被撞查询 / 其它窗碰撞检测时上报用）
-    this.pressScoreFired = false; // 按下瞬间已触发过积分（pointerdown 即触发；click 据此不重复弹，同浏览器）
+    this.pressScoreFired = false;
+    this.clickBalanceAt = 0; // 按下瞬间已触发过积分（pointerdown 即触发；click 据此不重复弹，同浏览器）
     this.lastFlightReport = 0;
     if (window.petBridge && window.petBridge.onFlightStates) {
       window.petBridge.onFlightStates((states) => {
@@ -1192,6 +1193,7 @@ class PetSprite {
     // 在飞行中且达标 → 立即粒子爆发 + 积分弹窗；pressScoreFired 标记本次按下已触发，
     // 松开的 click 据此不再重复弹、也不再播普通点击动画（与浏览器同构）。
     this.pressScoreFired = false;
+    this.clickBalanceAt = 0;
     // 修饰键+点击是「呼出 DSH」快捷键（见 onClick）：不弹积分，避免快捷键顺手刷分
     if (grabState && !isOpenShortcut(e)) {
       const grabSpeed = Math.hypot(grabState.vx, grabState.vy);
@@ -1577,9 +1579,20 @@ class PetSprite {
     // 本次按下已触发过积分 → 只收手停住、**不**再播普通点击动画（粒子+弹窗即反馈，与浏览器同构）
     if (this.pressScoreFired) {
       this.pressScoreFired = false;
+    this.clickBalanceAt = 0;
       this.stopThrow();
       this.stopMove();
       return;
+    }
+    // 点击音效（与浏览器端同一套配置；失败静默）
+    if (window.PetSound) void window.PetSound.playClick();
+    // 点击显示余额（每宠物开关 + 60s 冷却）
+    if (this.pet.clickBalanceEnabled) {
+      const now = Date.now();
+      if (now - this.clickBalanceAt > 60000) {
+        this.clickBalanceAt = now;
+        S.postAction(BASE + '/balance').catch((e) => console.warn('[dsh-pet-plus] 点击余额失败', e));
+      }
     }
     this.stopThrow(); // 点击飞行中的宠物 = 收手停住（再播点击回应）
     this.stopMove();

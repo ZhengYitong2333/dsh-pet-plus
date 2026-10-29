@@ -116,6 +116,9 @@ import { ContentService, contentConfOf } from './content/service';
 import { TodoStore } from './todo';
 import { getWeather, festivalOf } from './weather';
 import { assistText, type AssistKind } from './assist';
+import { nowPlaying } from './music';
+import { speak } from './tts';
+import { openQuick, quickItemsOf } from './quicklaunch';
 import { configuredModel } from './model-selection';
 import { limitPool, pickMeme, readMemePool } from './memes';
 import {
@@ -187,7 +190,11 @@ export const name = 'pet';
 export const inject = ['webServer', 'agentDefaultModel', 'credentials', 'llm', 'commands', 'connection'];
 
 /** 本包目录：宿主构建产物位于 lib/，其上一级即包根。 */
-const PACKAGE_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
+// lib/index.js → 包根；直接跑 src/host/index.ts（测试/开发）→ 需要再上一级才是包根
+const PACKAGE_ROOT = (() => {
+  const here = resolve(fileURLToPath(new URL('..', import.meta.url)));
+  return existsSync(join(here, 'assets')) ? here : resolve(here, '..');
+})();
 
 /** 包内 assets 根 */
 const PACKAGE_ROOT_ASSETS = join(PACKAGE_ROOT, 'assets');
@@ -2181,6 +2188,69 @@ export function apply(ctx: any): void {
       return { kind: 'json', status: ok ? 200 : 400, obj: { ok } };
     }
 
+    // P2 陪伴：音乐 / TTS / 快捷启动 / 记忆时间线
+    if (rest === 'music/now') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      return { kind: 'json', status: 200, obj: await nowPlaying() };
+    }
+    if (rest === 'tts') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let req: Record<string, unknown> = {};
+      try {
+        req = (JSON.parse(body ?? '{}') as Record<string, unknown>) ?? {};
+      } catch {
+        return { kind: 'json', status: 400, obj: { ok: false, message: 'invalid json' } };
+      }
+      const main = readAllConfig(configPaths).main ?? {};
+      const p2 = (main.p2 ?? {}) as Record<string, unknown>;
+      const tts = (p2.tts ?? {}) as Record<string, unknown>;
+      if (tts.enabled !== true) return { kind: 'json', status: 200, obj: { ok: false, message: 'TTS 未启用' } };
+      return {
+        kind: 'json',
+        status: 200,
+        obj: speak(String(req.text ?? ''), {
+          voice: typeof tts.voice === 'string' ? tts.voice : undefined,
+          rate: Number(tts.rate),
+        }),
+      };
+    }
+    if (rest === 'quick-launch') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      return { kind: 'json', status: 200, obj: { ok: true, items: quickItemsOf(readAllConfig(configPaths).main ?? {}) } };
+    }
+    if (rest === 'quick-launch/open') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let req: Record<string, unknown> = {};
+      try {
+        req = (JSON.parse(body ?? '{}') as Record<string, unknown>) ?? {};
+      } catch {
+        return { kind: 'json', status: 400, obj: { ok: false, message: 'invalid json' } };
+      }
+      const items = quickItemsOf(readAllConfig(configPaths).main ?? {});
+      const item = items.find((i) => i.id === String(req.id ?? ''));
+      if (!item) return { kind: 'json', status: 404, obj: { ok: false, message: 'unknown item' } };
+      return { kind: 'json', status: 200, obj: openQuick(item) };
+    }
+    if (rest === 'memory/timeline') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const episodes = memoryService.episodes.list({ limit: 100 }).map((e) => ({
+        type: 'episode' as const,
+        ts: e.ts,
+        text: e.summary,
+        importance: e.importance,
+        status: e.status,
+      }));
+      const entries = memoryService.profile.list().map((e) => ({
+        type: 'profile' as const,
+        ts: e.updatedAt,
+        text: e.text,
+        importance: e.importance,
+        status: e.archived ? 'archived' : 'active',
+      }));
+      const items = [...episodes, ...entries].sort((a, b) => b.ts - a.ts).slice(0, 200);
+      return { kind: 'json', status: 200, obj: { ok: true, items } };
+    }
+
     // P1 陪伴：待办 / 天气 / 节日 / 拖拽即问
     if (rest === 'todo') {
       if (method === 'GET') return { kind: 'json', status: 200, obj: { ok: true, tasks: todoStore.list() } };
@@ -3010,6 +3080,107 @@ export function apply(ctx: any): void {
       errorDispose();
     };
   }, 'dsh-pet: notify frames');
+
+  // /digest /todo /weather /memory /content：把 P1-P4 能力暴露到 DSH 命令面板
+  ctx.effect(
+    () =>
+      ctx.commands.register({
+        name: 'digest',
+        description: '内容副驾：总结抖音/小红书链接并给 3 条评论候选',
+        input: { hint: '<链接>' },
+        handler: async ({ rawInput }: { rawInput: string }) => {
+          const link = rawInput.trim();
+          if (!link) return { kind: 'error', text: '用法：/digest <抖音或小红书链接>' };
+          const result = await contentService.digest({ link });
+          if (!result.ok) return { kind: 'error', text: '生成失败：' + (result.message ?? result.reason) };
+          const r = result.result;
+          return {
+            kind: 'success',
+            text: [
+              r.summary,
+              ...r.points.map((p, i) => `${i + 1}. ${p}`),
+              '评论候选：',
+              ...r.comments.map((c, i) => `${i + 1}. [${c.tone}] ${c.text}`),
+              r.risk ? '风险：' + r.risk : '',
+            ]
+              .filter(Boolean)
+              .join('\n'),
+          };
+        },
+      }),
+    'dsh-pet-plus: /digest command',
+  );
+  ctx.effect(
+    () =>
+      ctx.commands.register({
+        name: 'todo',
+        description: '待办：/todo 列表、/todo add <内容>、/todo done <id>',
+        input: { hint: '[add|done|remove] [内容/id]' },
+        handler: async ({ rawInput }: { rawInput: string }) => {
+          const raw = rawInput.trim();
+          if (!raw || raw === 'list') {
+            const items = todoStore.list();
+            return { kind: 'success', text: items.length ? items.map((t) => `${t.done ? '✓' : '○'} ${t.id} ${t.text}`).join('\n') : '暂无待办' };
+          }
+          const [action, ...rest] = raw.split(/\s+/);
+          const body = rest.join(' ').trim();
+          if (action === 'add') {
+            const item = await todoStore.add(body);
+            return item ? { kind: 'success', text: '已添加：' + item.text } : { kind: 'error', text: '内容为空' };
+          }
+          if ((action === 'done' || action === 'remove') && body) {
+            const ok = action === 'done' ? Boolean(await todoStore.update(body, { done: true })) : await todoStore.remove(body);
+            return ok ? { kind: 'success', text: '已' + (action === 'done' ? '完成' : '删除') } : { kind: 'error', text: '找不到该待办' };
+          }
+          return { kind: 'error', text: '用法：/todo [list|add <内容>|done <id>|remove <id>]' };
+        },
+      }),
+    'dsh-pet-plus: /todo command',
+  );
+  ctx.effect(
+    () =>
+      ctx.commands.register({
+        name: 'weather',
+        description: '显示当前天气（城市在扩展设置里配置）',
+        handler: async () => {
+          const main = readAllConfig(configPaths).main ?? {};
+          const p1 = (main.p1 ?? {}) as Record<string, unknown>;
+          const w = (p1.weather ?? {}) as Record<string, unknown>;
+          const result = await getWeather(typeof w.city === 'string' ? w.city : '');
+          return result.ok
+            ? { kind: 'success' as const, text: `${result.city} ${result.description} ${result.temperature}°C（体感 ${result.apparent}°C，${result.min}~${result.max}°C）` }
+            : { kind: 'error' as const, text: result.message ?? '天气获取失败' };
+        },
+      }),
+    'dsh-pet-plus: /weather command',
+  );
+  ctx.effect(
+    () =>
+      ctx.commands.register({
+        name: 'memory',
+        description: '长期记忆：/memory list、/memory add <内容>、/memory forget <id>',
+        input: { hint: '[list|add|forget] [内容/id]' },
+        handler: async ({ rawInput }: { rawInput: string }) => {
+          const raw = rawInput.trim();
+          if (!raw || raw === 'list') {
+            const items = memoryService.profile.list().slice(0, 20);
+            return { kind: 'success', text: items.length ? items.map((e) => `${e.id} [${e.layer}] ${e.text}`).join('\n') : '暂无长期记忆' };
+          }
+          const [action, ...rest] = raw.split(/\s+/);
+          const body = rest.join(' ').trim();
+          if (action === 'add') {
+            const result = await memoryService.profile.add({ text: body, source: 'manual' });
+            return result ? { kind: 'success', text: '已记住：' + result.entry.text } : { kind: 'error', text: '文本为空或已被删除' };
+          }
+          if (action === 'forget' && body) {
+            const ok = await memoryService.profile.forget(body);
+            return ok ? { kind: 'success', text: '已删除并写入墓碑' } : { kind: 'error', text: '找不到该条目' };
+          }
+          return { kind: 'error', text: '用法：/memory [list|add <内容>|forget <id>]' };
+        },
+      }),
+    'dsh-pet-plus: /memory command',
+  );
 
   // /balance 斜杠命令：触发一次余额刷新（写 S → 前端 1s 轮询看到后弹气泡）。
   // fire-and-forget：回执不等外部 API（查询可能要几秒），立刻回；结果一律从 S 看
