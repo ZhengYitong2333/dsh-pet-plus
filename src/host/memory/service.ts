@@ -6,12 +6,14 @@ import { InstructionsStore } from './instructions.ts';
 import { BudgetStore } from './budget.ts';
 import { renderMemoryBlock } from './render.ts';
 import { ProfileStore } from './profile.ts';
+import { EpisodeStore } from './episodes.ts';
 import { existsSync } from 'node:fs';
 
 export interface MemoryService {
   paths: MemoryPaths;
   instructions: InstructionsStore;
   profile: ProfileStore;
+  episodes: EpisodeStore;
   budget: BudgetStore;
   settings(conf: Record<string, unknown>): MemorySettings;
   /** 生成注入段；关闭/空记忆返回空串。 */
@@ -21,6 +23,7 @@ export interface MemoryService {
     budget: BudgetSnapshot;
     files: { profile: boolean; episodes: boolean };
     profile: { active: number; archived: number; tombstoned: number };
+    episodes: { active: number; promoted: number; archived: number };
   };
 }
 
@@ -31,12 +34,14 @@ export function createMemoryService(
   const paths = memoryPaths(userRoot);
   const instructions = new InstructionsStore(paths.instructions, paths.backupsDir, clock);
   const profile = new ProfileStore(paths.profile, paths.backupsDir, clock);
+  const episodes = new EpisodeStore(paths.episodes, clock);
   const budget = new BudgetStore(paths.budget, clock);
 
   return {
     paths,
     instructions,
     profile,
+    episodes,
     budget,
     settings: memorySettingsOf,
     render(conf) {
@@ -45,6 +50,7 @@ export function createMemoryService(
         settings,
         instructions: instructions.read().text,
         l2Index: profile.renderIndex(settings.l2IndexChars),
+        l1Index: episodes.renderIndex(settings.l1Chars),
       });
     },
     stats(conf) {
@@ -62,6 +68,7 @@ export function createMemoryService(
           episodes: existsSync(paths.episodes),
         },
         profile: profile.count(),
+        episodes: episodes.count(),
       };
     },
   };

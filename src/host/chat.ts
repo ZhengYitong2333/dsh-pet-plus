@@ -26,7 +26,16 @@
  * （对话配图是点缀，不强制每句都带）。
  */
 
-import { BlockAssembler, createAssistantMessage, createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm';
+import {
+  BlockAssembler,
+  createAssistantMessage,
+  createToolResultMessage,
+  createUserMessage,
+  ReasoningEffortId,
+  type RequestMessage,
+  type ToolSchema,
+  type ToolCallBlock,
+} from '@deepseek-ai/dsh-llm';
 import { PET_CALL_IDENTITY, noTextReason } from './llm-call';
 import { supportsReasoningOff } from './llm-reasoning';
 import { extractChatImage, memeCatalog, type MemeEntry } from './memes';
@@ -36,6 +45,14 @@ import { modelCandidates, modelLabel, type ModelRef } from './model-selection';
 export type ChatGenerateResult =
   | { ok: true; text: string; image?: string }
   | { ok: false; reason: 'provider-missing' | 'generate-error'; message?: string };
+
+/** 对话工具：schema + 执行器（最多 maxRounds 轮工具调用）。 */
+export interface ChatTooling {
+  tools: ToolSchema[];
+  execute(name: string, rawArgs: string): Promise<{ text: string; isError?: boolean }>;
+  /** 工具轮上限；默认 1（TTFT 优先），显式 /recall 可给 2 */
+  maxRounds?: number;
+}
 
 /** 记忆中的一条消息（与 shared/chat.ts 的 ChatMessage 同构） */
 export interface ChatMemoryMessage {
@@ -73,6 +90,7 @@ export async function generateChat(
   userText: string,
   pool: MemeEntry[] = [],
   preferred?: ModelRef,
+  tooling?: ChatTooling,
 ): Promise<ChatGenerateResult> {
   // 候选链：配置的模型优先 → 当前对话的模型兜底（chatModel 留空时链上只有后者，与旧版逐字一致）
   const candidates = modelCandidates(ctx, preferred);
@@ -88,7 +106,7 @@ export async function generateChat(
   // 兜底文案与失败分支同源，避免两处字面量漂移
   let last: ChatGenerateResult = { ok: false, reason: 'generate-error', message: noTextReason(undefined) };
   for (const [i, sel] of candidates.entries()) {
-    const result = await generateWith(ctx, llm, sel, system, history, userText, pool);
+    const result = await generateWith(ctx, llm, sel, system, history, userText, pool, tooling);
     if (result.ok) return result;
     last = result;
     // 回落要留痕：配的模型没生效时能在日志里看到原因（否则"我明明配了 A，怎么还是用 B"没法查）
@@ -110,9 +128,10 @@ async function generateWith(
   history: ChatMemoryMessage[],
   userText: string,
   pool: MemeEntry[],
+  tooling?: ChatTooling,
 ): Promise<ChatGenerateResult> {
   // 历史 → dsh-llm 消息：user 经 createUserMessage（plugin 来源），assistant 经 createAssistantMessage
-  const historyMessages = history.map((m) =>
+  const historyMessages: RequestMessage[] = history.map((m) =>
     m.role === 'user'
       ? createUserMessage({
           content: [{ type: 'text', text: m.content }],
@@ -124,55 +143,92 @@ async function generateWith(
         }),
   );
 
-  const deadline = AbortSignal.timeout(TIMEOUT_MS);
   // 仅当模型声明支持 reasoning effort（含 "off"）时才传，否则省略：
   // 无 reasoning 元数据的模型（如 reasoningEfforts: false）显式传 off 会被
   // dsh-llm 判为 UNSUPPORTED_REASONING_EFFORT 并折叠成空流（表现为"模型未返回文本"）。
   const supportsOff = await supportsReasoningOff(ctx, sel.provider, sel.model);
   // 配图：池非空才把清单与指令附进 user 正文（空池 = 关闭配图，正文与旧行为逐字一致）
   const wantImage = pool.length > 0;
-  const options = {
-    provider: sel.provider,
-    model: sel.model,
-    // 调用身份（见 llm-call.ts）：缺它时 opencode-go 回 400
-    sessionId: PET_CALL_IDENTITY,
-    messages: [
-      ...historyMessages,
-      createUserMessage({
-        content: [{ type: 'text', text: wantImage ? userText + imageInstruction(pool) : userText }],
-        source: { kind: 'user' },
-      }),
-    ],
-    system,
-    // 不显式限 maxTokens：与碎碎念同因——推理模型把思考计入预算，显式小上限会截断正文；
-    // 不传由 dsh-llm 按适配器 defaultMaxTokens 兜底，对话短回复输出仍短。
-    temperature: 1,
-    // 统一关闭深度思考：闲聊对话不需要推理（与碎碎念同一约束；仅模型声明支持时传）
-    ...(supportsOff ? { reasoningEffort: ReasoningEffortId('off') } : {}),
-    signal: deadline,
-  };
+  const firstUser = createUserMessage({
+    content: [{ type: 'text', text: wantImage ? userText + imageInstruction(pool) : userText }],
+    source: { kind: 'user' },
+  });
+  let messages: RequestMessage[] = [...historyMessages, firstUser];
+  const maxRounds = tooling ? Math.max(0, Math.min(2, tooling.maxRounds ?? 1)) : 0;
 
-  const assembler = new BlockAssembler();
-  try {
-    for await (const chunk of llm.stream(options)) {
-      assembler.push(chunk as Parameters<BlockAssembler['push']>[0]);
-    }
-  } catch (e) {
-    return {
-      ok: false,
-      reason: 'generate-error',
-      message: e instanceof Error ? e.message : String(e),
+  // 工具轮：0 = 普通单次调用；>0 时模型可以调用 recall/read_session，最多 maxRounds 轮。
+  for (let round = 0; round <= maxRounds; round++) {
+    const deadline = AbortSignal.timeout(TIMEOUT_MS);
+    const options = {
+      provider: sel.provider,
+      model: sel.model,
+      // 调用身份（见 llm-call.ts）：缺它时 opencode-go 回 400
+      sessionId: PET_CALL_IDENTITY,
+      messages,
+      system,
+      // 不显式限 maxTokens：与碎碎念同因——推理模型把思考计入预算，显式小上限会截断正文；
+      // 不传由 dsh-llm 按适配器 defaultMaxTokens 兜底，对话短回复输出仍短。
+      temperature: 1,
+      // 统一关闭深度思考：闲聊对话不需要推理（与碎碎念同一约束；仅模型声明支持时传）
+      ...(supportsOff ? { reasoningEffort: ReasoningEffortId('off') } : {}),
+      ...(tooling && tooling.tools.length > 0 ? { tools: tooling.tools } : {}),
+      signal: deadline,
     };
+
+    const assembler = new BlockAssembler();
+    try {
+      for await (const chunk of llm.stream(options)) {
+        assembler.push(chunk as Parameters<BlockAssembler['push']>[0]);
+      }
+    } catch (e) {
+      return {
+        ok: false,
+        reason: 'generate-error',
+        message: e instanceof Error ? e.message : String(e),
+      };
+    }
+    const blocks = assembler.blocks();
+    const text = blocks
+      .filter((b) => b.type === 'text')
+      .map((b) => ('text' in b ? (b as { text: string }).text : ''))
+      .join('')
+      .trim();
+    const calls = blocks.filter((b): b is ToolCallBlock => b.type === 'tool-call');
+
+    // 没有工具调用 / 没有工具 / 轮次用完 → 以当前文本收尾
+    if (calls.length === 0 || !tooling || round === maxRounds) {
+      if (!text) return { ok: false, reason: 'generate-error', message: noTextReason(assembler.finish) };
+      if (!wantImage) return { ok: true, text };
+      const picked = extractChatImage(text, pool);
+      return picked.image ? { ok: true, text: picked.text, image: picked.image } : { ok: true, text: picked.text };
+    }
+
+    // 追加 assistant 的 tool-call 消息，再逐条执行并追加 tool 结果
+    messages = [
+      ...messages,
+      createAssistantMessage({
+        content: blocks,
+        source: { provider: sel.provider, model: sel.model },
+      }),
+    ];
+    for (const call of calls) {
+      let result: { text: string; isError?: boolean };
+      try {
+        result = await tooling.execute(call.name, call.arguments);
+      } catch (error) {
+        result = {
+          text: '工具执行失败：' + (error instanceof Error ? error.message : String(error)),
+          isError: true,
+        };
+      }
+      messages.push(
+        createToolResultMessage({
+          callId: call.id,
+          content: [{ type: 'text', text: result.text }],
+          isError: result.isError === true,
+        }),
+      );
+    }
   }
-  const text = assembler
-    .blocks()
-    .filter((b) => b.type === 'text')
-    .map((b) => ('text' in b ? (b as { text: string }).text : ''))
-    .join('')
-    .trim();
-  if (!text) return { ok: false, reason: 'generate-error', message: noTextReason(assembler.finish) };
-  // 配图解析：命中池内才采纳并剥离标记；未选/幻觉名称 → 原样返回纯文本
-  if (!wantImage) return { ok: true, text };
-  const picked = extractChatImage(text, pool);
-  return picked.image ? { ok: true, text: picked.text, image: picked.image } : { ok: true, text: picked.text };
+  return { ok: false, reason: 'generate-error', message: '工具轮次已用尽' };
 }

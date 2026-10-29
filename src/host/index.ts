@@ -107,6 +107,7 @@ import { automaticWhisperSchedule } from './whisper-policy';
 import { generateChat, type ChatMemoryMessage } from './chat';
 import { createMemoryService } from './memory/service';
 import { createSessionRecall, type SessionQueryLike } from './memory/sessions';
+import { createMemoryTools, hasRecallIntent } from './memory/tools';
 import { configuredModel } from './model-selection';
 import { limitPool, pickMeme, readMemePool } from './memes';
 import {
@@ -836,13 +837,41 @@ export function apply(ctx: any): void {
       // 不能写 slice(-rounds * 2)：-0 在 JS 里 === 0，slice(-0) 返回整个数组而不是空。
       const list = sliceMemoryRounds(entry.messages, rounds);
       // 模型：条目配置的 chatModel 优先（留空 = 不指定）；生成侧失败会回落到当前对话的模型重试一次
-      const generated = await generateChat(ctx, system, list, text, pool, configuredModel(found.conf, 'chatModel'));
+      const memSettings = memoryService.settings(found.conf);
+      let tooling: { tools: import('@deepseek-ai/dsh-llm').ToolSchema[]; execute: (name: string, args: string) => Promise<{ text: string; isError?: boolean }>; maxRounds: number } | undefined;
+      if (memSettings.enabled && memSettings.toolsMode !== 'off' && (memSettings.toolsMode === 'always' || hasRecallIntent(text))) {
+        const tools = createMemoryTools({
+          profile: memoryService.profile,
+          episodes: memoryService.episodes,
+          sessions: sessionRecall,
+          budget: memoryService.budget,
+          conf: found.conf,
+        });
+        tooling = { tools: tools.tools, execute: tools.execute, maxRounds: 1 };
+      }
+      const generated = await generateChat(
+        ctx,
+        system,
+        list,
+        text,
+        pool,
+        configuredModel(found.conf, 'chatModel'),
+        tooling,
+      );
       if (!generated.ok) return generated;
       const now = Date.now();
       entry.messages.push({ role: 'user', content: text, ts: now });
       // 记忆只存正文（配图属展示层，不进上下文——否则下次请求会把标记当历史读回去）
       entry.messages.push({ role: 'assistant', content: generated.text, ts: now });
       await writeMemory(mem);
+      // L1：规则门控的情节摘要（importance < 3 不写；纯本地，零模型调用）
+      try {
+        if (memoryService.settings(found.conf).enabled) {
+          memoryService.episodes.recordTurn(text, generated.text, petId);
+        }
+      } catch (error) {
+        console.warn('[dsh-pet-plus] L1 记录失败：' + String(error));
+      }
       // 回复写进 S（与碎碎念同一个叶子：前端本来就是同一条展示链路）
       state.writePet(
         petId,
