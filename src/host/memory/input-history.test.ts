@@ -8,8 +8,8 @@ import { InputHistoryStore, redact } from './input-history.ts';
 const settings = { enabled: true, maxPrompts: 5, extractEveryPrompts: 10, ttlDays: 7 };
 
 test('脱敏：key/token/长 hex 被替换', () => {
-  const text = redact('用 sk-abcdef1234567890 和 Bearer abcdefghijklmnop 以及 token=secret123 访问');
-  assert.ok(!text.includes('abcdef1234567890'));
+  const text = redact('用 sk-testkey123 和 Bearer abcdefghijklmnop 以及 token=secret123 访问');
+  assert.ok(!text.includes('testkey123'));
   assert.ok(!text.includes('secret123'));
   assert.match(text, /\*\*\*/);
 });
