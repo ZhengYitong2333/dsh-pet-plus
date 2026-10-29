@@ -54,6 +54,7 @@
     "build": "rm -rf lib && tsdown && node scripts/postbuild.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test \"src/**/*.test.ts\"",
+    "test:core": "node --experimental-strip-types --import ./scripts/test-register.mjs --test src/host/memory/*.test.ts src/host/content/*.test.ts src/host/im/*.test.ts src/host/suggest.test.ts src/host/todo.test.ts src/host/companion.test.ts src/host/quicklaunch.test.ts",
     "check:secrets": "node scripts/check-secrets.mjs",
     "prepare:types": "node scripts/link-dsh-types.mjs",
     "gen:gifs": "node scripts/gen-gifs.mjs",

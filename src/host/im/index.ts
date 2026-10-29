@@ -62,7 +62,7 @@ export function imConfigOf(conf: Record<string, unknown>): ImConfig {
   const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
   const num = (v: unknown, d: number) => (Number.isFinite(Number(v)) ? Number(v) : d);
   const mode = str(wx.mode, 'off');
-  return {
+  const config: ImConfig = {
     weixin: {
       mode: mode === 'ilink' || mode === 'bridge' ? mode : 'off',
       enabled: wx.enabled === true,
@@ -92,6 +92,11 @@ export function imConfigOf(conf: Record<string, unknown>): ImConfig {
     },
     remember: im.remember === true,
   };
+  // 密钥优先读环境变量；配置文件里的同名字段只作为兼容兜底（设置页永远不写密钥）。
+  if (process.env.DSH_PET_PLUS_QQ_ACCESS_TOKEN) config.qq.accessToken = process.env.DSH_PET_PLUS_QQ_ACCESS_TOKEN;
+  if (process.env.DSH_PET_PLUS_QQ_EVENT_SECRET) config.qq.eventSecret = process.env.DSH_PET_PLUS_QQ_EVENT_SECRET;
+  if (process.env.DSH_PET_PLUS_BRIDGE_SECRET) config.weixin.bridge.inboundSecret = process.env.DSH_PET_PLUS_BRIDGE_SECRET;
+  return config;
 }
 
 function sleep(ms: number): Promise<void> {

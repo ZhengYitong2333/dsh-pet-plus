@@ -114,6 +114,27 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return raw;
 }
 
+
+/** 把图片和一句提示直接“粘贴”进 DSH 当前输入框；找不到输入框返回 false。 */
+function pasteScreenshotIntoComposer(blob: Blob): boolean {
+  try {
+    const candidates = Array.from(
+      document.querySelectorAll<HTMLElement>('textarea, [contenteditable="true"], [contenteditable=""]'),
+    ).filter((el) => !el.closest(`#${ROOT_ID}`) && el.getClientRects().length > 0);
+    const target = candidates[candidates.length - 1];
+    if (!target) return false;
+    target.focus();
+    const data = new DataTransfer();
+    data.setData('text/plain', '解释这张截图');
+    data.items.add(new File([blob], `screenshot-${Date.now()}.png`, { type: 'image/png' }));
+    const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data });
+    target.dispatchEvent(event);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function toast(text: string, kind: 'ok' | 'err' = 'ok'): void {
   ensureStyle();
   const node = document.createElement('div');
@@ -244,14 +265,16 @@ export function installCompanion(ctx: Context): () => void {
       stream.getTracks().forEach((t) => t.stop());
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
       if (!blob) throw new Error('截图编码失败');
+      // 先复制，保证失败时还有退路
       if (navigator.clipboard && 'write' in navigator.clipboard && typeof ClipboardItem !== 'undefined') {
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        toast('截图已复制。在对话输入框粘贴并回车，我就能看图解释。');
-      } else {
-        const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
-        toast('当前浏览器不支持写剪贴板，已在新标签打开截图');
       }
+      // 再尝试直接粘进 DSH 输入框：DSH 自己会把图片交给多模态模型，等于一键“截图解释”。
+      if (pasteScreenshotIntoComposer(blob)) {
+        toast('截图已放进输入框，按回车我就开始看图解释。');
+        return;
+      }
+      toast('截图已复制。在对话输入框粘贴并回车，我就能看图解释。');
     } catch (error) {
       toast('截图失败：' + (error instanceof Error ? error.message : String(error)), 'err');
     }
