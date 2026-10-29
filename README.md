@@ -183,7 +183,9 @@ flowchart TB
 - [x] P0 基座、构建链、安装冒烟、README、CI
 - [ ] P1 四层记忆（L0–L3）+ CRUD + TTFT 埋点
   - [x] L3 指令层 + 原子存储/跨进程锁 + 每日预算 + 注入渲染 + 单测
-  - [ ] L0 `ctx.sessionQuery` 接入 / L1 情节 / L2 画像与 CRUD
+  - [x] L0 `ctx.sessionQuery` 适配（cwd 过滤 / 超时降级）
+  - [x] L2 条目 CRUD（去重 / 取代 / 墓碑 / 乐观锁 / 容量淘汰）
+  - [ ] L1 情节摘要 + 提升/归档 + recall 工具与注入
 - [ ] P2 输入画像 + 快捷键三候选
 - [ ] P3 微信 iLink / 通用桥 / QQ
 - [ ] P4 内容副驾 + 全自动（安全阀）

@@ -106,6 +106,7 @@ import { generateWhisper } from './whisper';
 import { automaticWhisperSchedule } from './whisper-policy';
 import { generateChat, type ChatMemoryMessage } from './chat';
 import { createMemoryService } from './memory/service';
+import { createSessionRecall, type SessionQueryLike } from './memory/sessions';
 import { configuredModel } from './model-selection';
 import { limitPool, pickMeme, readMemePool } from './memes';
 import {
@@ -315,6 +316,17 @@ export function apply(ctx: any): void {
   const userRoot = join(dshHome, 'dsh-pet-plus');
   // 长期记忆服务（L3 指令层先行；L1/L2 后续接入）
   const memoryService = createMemoryService(userRoot);
+  // L0：DSH 会话检索（可选服务；默认关闭时降级为 unavailable）
+  const sessionRecall = createSessionRecall(
+    () => {
+      try {
+        return (ctx.get?.('sessionQuery') as SessionQueryLike | undefined) ?? undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    { cwd: () => process.cwd() },
+  );
   // 用户主配置（可编辑层）与文件宠物目录；配置读取/合并统一走 readAllConfig（./config）。
   // 主配置是 **JSONC**（main-config.jsonc）——与包内默认 config.jsonc 同名同格式：
   // 「同步」写进去的就是带注释的原文，扩展名如实反映内容（旧版 main-config.json 只读回落 + 启动迁移）
@@ -2078,6 +2090,122 @@ export function apply(ctx: any): void {
       });
     }
 
+    // L2 长期记忆：/memory/profile（列表/新增）、/memory/profile/<id>（改/删/恢复）、/memory/search
+    if (rest === 'memory/profile') {
+      if (method === 'GET') {
+        const includeArchived = url.searchParams.get('includeArchived') === '1';
+        const q = url.searchParams.get('q') ?? '';
+        return {
+          kind: 'json',
+          status: 200,
+          obj: { ok: true, entries: memoryService.profile.list({ includeArchived, query: q }) },
+        };
+      }
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let bodyObj: Record<string, unknown> = {};
+      try {
+        bodyObj = (JSON.parse(body ?? '{}') as Record<string, unknown>) ?? {};
+      } catch {
+        return { kind: 'json', status: 400, obj: { ok: false, reason: 'bad-request', message: '请求体不是合法 JSON' } };
+      }
+      const text = typeof bodyObj.text === 'string' ? bodyObj.text : '';
+      const result = await memoryService.profile.add({
+        text,
+        layer: typeof bodyObj.layer === 'string' ? (bodyObj.layer as never) : undefined,
+        importance: Number(bodyObj.importance),
+        source: 'manual',
+      });
+      if (!result) {
+        return {
+          kind: 'json',
+          status: 400,
+          obj: { ok: false, reason: 'rejected', message: '文本为空或已被用户删除（墓碑抑制）' },
+        };
+      }
+      return { kind: 'json', status: 200, obj: { ok: true, created: result.created, entry: result.entry } };
+    }
+    if (rest.startsWith('memory/profile/')) {
+      const parts = rest.slice('memory/profile/'.length).split('/');
+      const id = decodeURIComponent(parts[0] ?? '');
+      const action = parts[1] ?? '';
+      if (!id) return { kind: 'json', status: 400, obj: { ok: false, reason: 'bad-request', message: '缺少条目 id' } };
+      if (action === 'forget' || method === 'DELETE') {
+        const ok = await memoryService.profile.forget(id);
+        return { kind: 'json', status: ok ? 200 : 404, obj: { ok } };
+      }
+      if (action === 'restore') {
+        const ok = await memoryService.profile.restore(id);
+        return { kind: 'json', status: ok ? 200 : 404, obj: { ok } };
+      }
+      if (action !== '') {
+        return { kind: 'json', status: 404, obj: { ok: false, reason: 'unknown-action' } };
+      }
+      if (method !== 'PATCH') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let patch: Record<string, unknown> = {};
+      try {
+        patch = (JSON.parse(body ?? '{}') as Record<string, unknown>) ?? {};
+      } catch {
+        return { kind: 'json', status: 400, obj: { ok: false, reason: 'bad-request', message: '请求体不是合法 JSON' } };
+      }
+      const expected = Number(patch.expectedRev);
+      const result = await memoryService.profile.update(
+        id,
+        {
+          text: typeof patch.text === 'string' ? patch.text : undefined,
+          layer: typeof patch.layer === 'string' ? (patch.layer as never) : undefined,
+          importance: patch.importance === undefined ? undefined : Number(patch.importance),
+          archived: patch.archived === undefined ? undefined : Boolean(patch.archived),
+        },
+        Number.isFinite(expected) ? expected : undefined,
+      );
+      if (!result.ok) {
+        return {
+          kind: 'json',
+          status: result.reason === 'conflict' ? 409 : 404,
+          obj: { ok: false, reason: result.reason },
+        };
+      }
+      return { kind: 'json', status: 200, obj: { ok: true, entry: result.entry } };
+    }
+    if (rest === 'memory/search') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const q = url.searchParams.get('q') ?? '';
+      const limit = Math.max(1, Math.min(10, Number(url.searchParams.get('limit') ?? 3)));
+      return { kind: 'json', status: 200, obj: { ok: true, entries: memoryService.profile.search(q, limit) } };
+    }
+    if (rest === 'memory/clear') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      await memoryService.profile.clear();
+      return { kind: 'json', status: 200, obj: { ok: true } };
+    }
+
+    // L0 会话轨迹：GET /memory/sessions?q=&limit= / GET /memory/sessions/<id>
+    if (rest === 'memory/sessions') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const q = url.searchParams.get('q') ?? '';
+      const limit = Math.max(1, Math.min(10, Number(url.searchParams.get('limit') ?? 3)));
+      const result = await sessionRecall.search(q, limit);
+      return {
+        kind: 'json',
+        status: 200,
+        obj: result.ok
+          ? { ok: true, hits: result.value }
+          : { ok: false, reason: result.reason, message: result.message },
+      };
+    }
+    if (rest.startsWith('memory/sessions/')) {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const id = decodeURIComponent(rest.slice('memory/sessions/'.length));
+      const result = await sessionRecall.read(id, 1200);
+      return {
+        kind: 'json',
+        status: 200,
+        obj: result.ok
+          ? { ok: true, text: result.value }
+          : { ok: false, reason: result.reason, message: result.message },
+      };
+    }
+
     // 长期记忆（L3 指令层）：GET/PUT /memory/instructions；GET /memory/stats
     // 只读写用户手写层；L2/L1 的 CRUD 在后续阶段接入同一前缀。
     if (rest === 'memory/instructions') {
@@ -2314,7 +2442,7 @@ export function apply(ctx: any): void {
           const onClose = (): void => abort.abort();
           res.on('close', onClose);
           try {
-            const body = req.method === 'PUT' || req.method === 'POST' ? await readBody(req) : undefined;
+            const body = req.method === 'PUT' || req.method === 'POST' || req.method === 'PATCH' ? await readBody(req) : undefined;
             const result = await handlePetRoute(req.url ?? '/', req.method ?? 'GET', body, abort.signal);
             res.off('close', onClose);
             if (result.kind === 'json') sendJson(res, result.status, result.obj, result.headers);
