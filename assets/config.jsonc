@@ -109,6 +109,13 @@
   // 非负整数；**内置默认 10**（27 张的池子砍到约 1/3 开销，可选项仍够挑）；0 = 不限制（全部发）。
   // 只影响对话选图：碎碎念只带抽中的那一张，与本项无关。
   "chatImageLimit": 10,
+  // 点击音效（全局；设置页可改）：default=自合成 pop，duck=鸭子 Ya1/Ya2，file/folder 预留
+  "clickSoundEnabled": true,
+  "clickSoundPack": { "kind": "builtin", "id": "default", "path": "" },
+  "clickSoundVolume": 0.7,
+  "clickSoundMinIntervalMs": 80,
+  // 点击显示余额的冷却（秒）：每只宠物可在 pets[].clickBalanceEnabled 单独开
+  "balanceClickCooldownSec": 60,
   // ===================== 表情包：图片映射（名称 → 描述，模型据此选图） =====================
   // 键 = assets/memes/<键>.png 的文件名（不含扩展名）；值 = 该图内容的简要描述。
   // 用途：碎碎念随机抽到某张图后，把该图描述注入提示词让模型配合画面说话；
@@ -231,6 +238,7 @@
       "id": "main",
       "size": 462,
       "balanceEnabled": true,
+      "clickBalanceEnabled": false,
       // 碎碎念默认开启：每次生成都会调用当前对话的模型。本地 LLM 单并发时，
       // 后台碎碎念会顶掉正在跑的任务的 KV cache（与 DSH 多子代理同因）。
       // 不需要碎碎念的宠物改为 false（设置页也可开关）。

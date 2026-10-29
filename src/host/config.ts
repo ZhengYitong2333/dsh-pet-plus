@@ -560,6 +560,7 @@ function mergePet(
     name,
     size: petNumber(p.size, base.size, 1, label, 'size', id),
     balanceEnabled: petBool(p.balanceEnabled, base.balanceEnabled, label, 'balanceEnabled', id),
+    clickBalanceEnabled: petBool(p.clickBalanceEnabled, base.clickBalanceEnabled ?? false, label, 'clickBalanceEnabled', id),
     whisperEnabled: petBool(p.whisperEnabled, base.whisperEnabled, label, 'whisperEnabled', id),
     workStatusEnabled: petBool(p.workStatusEnabled, base.workStatusEnabled, label, 'workStatusEnabled', id),
     fixedEnabled: petBool(p.fixedEnabled, base.fixedEnabled, label, 'fixedEnabled', id),
@@ -688,6 +689,8 @@ export function saveUserConfig(
     }
     const balanceEnabled = pp.balanceEnabled;
     if (typeof balanceEnabled !== 'boolean') return null;
+    const clickBalanceEnabled = pp.clickBalanceEnabled;
+    if (clickBalanceEnabled !== undefined && typeof clickBalanceEnabled !== 'boolean') return null;
     const whisperEnabled = pp.whisperEnabled;
     if (whisperEnabled !== undefined && typeof whisperEnabled !== 'boolean') return null;
     const workStatusEnabled = pp.workStatusEnabled;
@@ -716,6 +719,7 @@ export function saveUserConfig(
       name,
       size,
       balanceEnabled,
+      clickBalanceEnabled: clickBalanceEnabled ?? false,
       whisperEnabled,
       workStatusEnabled,
       fixedEnabled,

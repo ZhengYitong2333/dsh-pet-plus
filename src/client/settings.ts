@@ -1357,6 +1357,7 @@ export function makePetConfigSection(rt: {
           name: id,
           size: tpl.size,
           balanceEnabled: tpl.balanceEnabled,
+          clickBalanceEnabled: tpl.clickBalanceEnabled ?? false,
           whisperEnabled: tpl.whisperEnabled,
           workStatusEnabled: tpl.workStatusEnabled,
           fixedEnabled: tpl.fixedEnabled,

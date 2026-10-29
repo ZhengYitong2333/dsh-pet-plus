@@ -16,6 +16,13 @@
 - 字体「上首软糖体」（`assets/fonts/上首软糖体.ttf`）：版权归原字体作者，随上游素材原样分发；
   商用前请自行确认字体授权。
 
+
+## 音效素材
+
+- `assets/sounds/duck/Ya1.mp3`、`Ya2.mp3`：来自 [MeteorNOX/DeepSeek-Balance-Whale-Widget](https://github.com/MeteorNOX/DeepSeek-Balance-Whale-Widget)，MIT License（Copyright (c) 2025 MeteorNOX）。
+- `assets/sounds/click.wav`：本项目用脚本合成的短 pop 音，随项目 MIT 分发。
+- 自定义音效：用户放在 `$DSH_HOME/dsh-pet-plus/sounds/`，不上传、不随仓库分发。
+
 ## 第三方依赖
 
 构建期依赖（不随包分发）与打包进 `lib/index.js` 的依赖，其许可证以各自包内 LICENSE 为准，主要包括：

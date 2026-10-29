@@ -213,6 +213,9 @@ const MIME: Record<string, string> = {
   '.ttf': 'font/ttf',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
+  '.wav': 'audio/wav',
+  '.mp3': 'audio/mpeg',
+  '.ogg': 'audio/ogg',
 };
 
 /**
@@ -2588,6 +2591,29 @@ export function apply(ctx: any): void {
     // 扩展名常量（src/shared/constants.ts 的 ANIMATION_EXT / 产物 lib/client.js）改为 .mov。
     // 注意：font / pic 是扁平的 /<scope>/<file>，只有 thumb 是 /<scope>/<petId>/<file>——
     // 这里先拆 scope，再按 scope 各自拆剩余段，避免 font/pic 被误当作 petId 吞掉文件段。
+    // 点击音效素材：/sound/<default|duck|user>/<file>（只服务包内与用户 sounds 目录）
+    if (rest.startsWith('sound/')) {
+      const parts = rest.slice('sound/'.length).split('/');
+      const pack = parts[0];
+      const name = parts.slice(1).join('/');
+      const root =
+        pack === 'default'
+          ? join(PACKAGE_ROOT_ASSETS, 'sounds')
+          : pack === 'duck'
+            ? join(PACKAGE_ROOT_ASSETS, 'sounds', 'duck')
+            : pack === 'user'
+              ? join(userRoot, 'sounds')
+              : undefined;
+      if (!root || !name) return { kind: 'text', status: 404, body: 'dsh-pet-plus: sound pack not found' };
+      const file = resolveExisting(root, name);
+      if (file === undefined) return { kind: 'text', status: 404, body: 'dsh-pet-plus: sound not found' };
+      const ext = file.slice(file.lastIndexOf('.')).toLowerCase();
+      if (ext !== '.wav' && ext !== '.mp3' && ext !== '.ogg') {
+        return { kind: 'text', status: 404, body: 'dsh-pet-plus: unsupported sound type' };
+      }
+      return { kind: 'file', file, contentType: MIME[ext] ?? 'application/octet-stream' };
+    }
+
     const [scope, ...restParts] = rest.split('/');
     if (scope === 'font') {
       const fontRoot = join(PACKAGE_ROOT, 'assets', 'fonts');

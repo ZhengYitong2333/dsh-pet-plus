@@ -16,6 +16,7 @@ import {
 import { planMove } from '../shared/motion';
 import { flattenConfigPets, isWebVisible } from '../shared/config';
 import { balanceEventIndex, balancePercent, decideBalanceNotice, type BalanceState } from '../shared/balance';
+import { playClickSound } from './sound';
 // 轮询统一状态 S：前端唯一的数据来源与渲染入口（拉取 / 拍平 / 比对都在 shared，两端同一份）
 import {
   fetchState,
@@ -372,6 +373,7 @@ export function makePetUI(rt: {
     const throwStateRef = useRef<ThrowState | null>(null);
     // 按下瞬间已触发过积分（pointerdown 即触发；防止松开的 click 再触发一次/再播点击动画）
     const pressScoreFiredRef = useRef(false);
+  const clickBalanceAtRef = useRef(0);
     // 上一次**按下**的时刻（0 = 还没记过）：弹弓的判定依据是「两次按下之间隔了多久」。
     // 按下记、按下比——这次按了多久、什么时候松手都不参与判定（见 handlePointerDown）。
     const lastPressAtRef = useRef(0);
@@ -1943,6 +1945,18 @@ export function makePetUI(rt: {
         stopThrow();
         stopMove();
         return;
+      }
+      // 点击音效（开关/音量/最小间隔由 host config 决定；失败静默）
+      void playClickSound();
+      // 点击显示余额（每宠物开关 + 60s 冷却；并发/服务商失败由 host 现有 manual 通道兜底）
+      if (cfg.clickBalanceEnabled) {
+        const now = Date.now();
+        if (now - clickBalanceAtRef.current > 60_000) {
+          clickBalanceAtRef.current = now;
+          postAction('/dsh-pet-plus/balance').catch((e: unknown) =>
+            console.warn('[dsh-pet-plus] 点击余额失败', e),
+          );
+        }
       }
       stopThrow(); // 点击飞行中的宠物 = 收手停住（再播点击回应）
       stopMove();
