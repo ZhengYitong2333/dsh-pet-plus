@@ -9,6 +9,7 @@ import { initNotify } from './notify';
 import { installCommandFaces, type CommandFace, type CommandUiLike } from './command-faces';
 import { installSectionNavIcon } from './nav-icon';
 import { installSuggest } from './suggest';
+import { makeExtrasSection } from './extras';
 import type * as ReactNS from 'react';
 import type * as PrimitivesNS from '@deepseek-ai/dsh-client-ui-primitives';
 
@@ -179,10 +180,17 @@ export function makeFactory(): (require: (mod: string) => any) => any {
       // 设置页：「桌宠配置」（大小/位置/模型，保存即时生效）。
       // useRef 用于「AI 模型」单下拉选择器（浮层定位与外部点击判定），与宠物页面同一份注入。
       const PetConfigSection = makePetConfigSection({ h, useState, useEffect, useRef, useCallback, t });
+      const ExtrasSection = makeExtrasSection({ useState, useEffect, createElement: react.createElement });
       ctx.slots.inject('settings.section', function* () {
         yield ctx.slots.register(
           { name: 'settings.section', id: 'pet-plus-config', order: 30, label: () => t('nav'), inject: () => ({ t }) },
           PetConfigSection,
+        );
+      });
+      ctx.slots.inject('settings.section', function* () {
+        yield ctx.slots.register(
+          { name: 'settings.section', id: 'pet-plus-extras', order: 31, label: () => '桌宠 Plus' },
+          ExtrasSection,
         );
       });
     }

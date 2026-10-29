@@ -142,6 +142,7 @@ import {
   readPetConfigEntry,
   readUserConfig,
   saveUserConfig,
+  saveUserExtras,
   sliceMemoryRounds,
   syncUserConfigFromDefault,
   userConfigUnparsable,
@@ -2165,6 +2166,19 @@ export function apply(ctx: any): void {
         }
         signal?.addEventListener('abort', onAbort, { once: true });
       });
+    }
+
+    // 扩展设置保存（memory/content/p1/clickSound/im 非密钥字段）
+    if (rest === 'settings/extras') {
+      if (method !== 'PUT') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let patch: Record<string, unknown> = {};
+      try {
+        patch = (JSON.parse(body ?? '{}') as Record<string, unknown>) ?? {};
+      } catch {
+        return { kind: 'json', status: 400, obj: { ok: false, message: 'invalid json' } };
+      }
+      const ok = saveUserExtras(configPaths, patch);
+      return { kind: 'json', status: ok ? 200 : 400, obj: { ok } };
     }
 
     // P1 陪伴：待办 / 天气 / 节日 / 拖拽即问

@@ -822,6 +822,58 @@ export function saveUserConfig(
  *
  * 默认文件缺失/目录不可写 → 直接抛（宿主回 500）：绝不静默留下半个配置文件。
  */
+/**
+ * 保存扩展设置（memory / content / p1 / clickSound* / balanceClickCooldownSec / im 的非密钥字段）。
+ * 只合并白名单键，保留用户已有 pets 与其它字段；不写任何密钥。
+ */
+/** 两层深合并：对象字段（memory.content.auto 等）只覆盖传了的子键，不整段丢弃。 */
+function mergeTwoLevels(base: unknown, patch: unknown): unknown {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return patch;
+  const out: Record<string, unknown> = { ...(base && typeof base === 'object' && !Array.isArray(base) ? (base as Record<string, unknown>) : {}) };
+  for (const [key, value] of Object.entries(patch as Record<string, unknown>)) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      out[key] = mergeTwoLevels(out[key], value);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+export function saveUserExtras(
+  paths: ConfigPaths,
+  patch: Record<string, unknown>,
+): boolean {
+  const existing = readUserConfig(paths) ?? {};
+  const out: Record<string, unknown> = { ...existing };
+  const objects = ['memory', 'content', 'p1', 'im'];
+  for (const key of objects) {
+    if (patch[key] === undefined) continue;
+    if (!patch[key] || typeof patch[key] !== 'object' || Array.isArray(patch[key])) return false;
+    if (key === 'im') {
+      // 绝不让 UI 把密钥写进明文配置
+      const im = { ...(patch[key] as Record<string, unknown>) };
+      const wx = { ...((im.weixin as Record<string, unknown>) ?? {}) };
+      const bridge = { ...((wx.bridge as Record<string, unknown>) ?? {}) };
+      delete bridge.inboundSecret;
+      wx.bridge = bridge;
+      const qq = { ...((im.qq as Record<string, unknown>) ?? {}) };
+      delete qq.accessToken;
+      delete qq.eventSecret;
+      im.weixin = wx;
+      im.qq = qq;
+      out[key] = mergeTwoLevels(out[key], im);
+    } else {
+      out[key] = mergeTwoLevels(out[key], patch[key]);
+    }
+  }
+  for (const key of ['clickSoundEnabled', 'clickSoundPack', 'clickSoundVolume', 'clickSoundMinIntervalMs', 'balanceClickCooldownSec']) {
+    if (patch[key] !== undefined) out[key] = patch[key];
+  }
+  writeFileSync(paths.userFile, JSON.stringify(out, null, 2) + '\n', 'utf8');
+  return true;
+}
+
 export function syncUserConfigFromDefault(paths: ConfigPaths): void {
   const raw = readFileSync(paths.defaultFile, 'utf8');
   mkdirSync(dirname(paths.userFile), { recursive: true });
