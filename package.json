@@ -13,7 +13,13 @@
     "floating-widget",
     "web-ui",
     "cordis",
-    "react"
+    "react",
+    "wechat",
+    "qq",
+    "onebot",
+    "douyin",
+    "xiaohongshu",
+    "long-term-memory"
   ],
   "homepage": "https://github.com/ZhengYitong2333/dsh-pet-plus#readme",
   "repository": {
@@ -48,13 +54,15 @@
     "runtime/electron-helper",
     "cordis.patch.yml",
     "NOTICE.md",
-    "README.md"
+    "README.md",
+    "README.en.md",
+    "docs"
   ],
   "scripts": {
     "build": "rm -rf lib && tsdown && node scripts/postbuild.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test \"src/**/*.test.ts\"",
-    "test:core": "node --experimental-strip-types --import ./scripts/test-register.mjs --test src/host/memory/*.test.ts src/host/content/*.test.ts src/host/im/*.test.ts src/host/suggest.test.ts src/host/todo.test.ts src/host/companion.test.ts src/host/quicklaunch.test.ts src/host/config.test.ts",
+    "test:core": "node --experimental-strip-types --import ./scripts/test-register.mjs --test src/host/memory/*.test.ts src/host/content/*.test.ts src/host/im/*.test.ts src/host/suggest.test.ts src/host/todo.test.ts src/host/companion.test.ts src/host/quicklaunch.test.ts src/host/config.test.ts src/client/*.test.ts src/shared/*.test.ts",
     "check:secrets": "node scripts/check-secrets.mjs",
     "prepare:types": "node scripts/link-dsh-types.mjs",
     "gen:gifs": "node scripts/gen-gifs.mjs",

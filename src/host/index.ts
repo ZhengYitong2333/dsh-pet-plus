@@ -110,6 +110,7 @@ import { createSessionRecall, type SessionQueryLike } from './memory/sessions';
 import { createMemoryTools, hasRecallIntent } from './memory/tools';
 import { InputHistoryStore } from './memory/input-history';
 import { extractInputProfile, shouldExtractInputProfile } from './memory/input-profile';
+import { compactMessages } from './memory/compact';
 import { generateSuggestions, SuggestCache } from './suggest';
 import { readJsonFile, writeJsonAtomic } from './memory/store';
 import { ImService, imConfigOf } from './im/index';
@@ -885,6 +886,13 @@ export function apply(ctx: any): void {
       entry.messages.push({ role: 'user', content: text, ts: now });
       // 记忆只存正文（配图属展示层，不进上下文——否则下次请求会把标记当历史读回去）
       entry.messages.push({ role: 'assistant', content: generated.text, ts: now });
+      // 压缩：超过 afterRounds 轮只保留最近 keepRecentRounds 轮（更早的已由 L1 规则摘要覆盖）
+      const compacted = compactMessages(
+        entry.messages,
+        memSettings.compress.afterRounds,
+        memSettings.compress.keepRecentRounds,
+      );
+      if (compacted.compacted) entry.messages = compacted.kept;
       await writeMemory(mem);
       // L1：规则门控的情节摘要（importance < 3 不写；纯本地，零模型调用）
       try {
