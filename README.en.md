@@ -53,6 +53,7 @@ Injection is capped at 1,500 chars per turn by default; if memory is off or empt
 `Mod+Alt+J` or the ✦ button:
 
 - todos with due-time countdown and overdue highlighting;
+- pomodoro timer (25/45 min, 5 min break) with a chime and desktop notification;
 - weather and festivals;
 - now playing (macOS Music / Spotify);
 - memory timeline;

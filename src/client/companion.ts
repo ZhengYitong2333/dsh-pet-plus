@@ -14,7 +14,7 @@ import { insertIntoLatestSession } from './suggest';
 const ROOT_ID = 'dsh-pet-plus-companion';
 const STYLE_ID = 'dsh-pet-plus/companion.css';
 
-type Tab = 'todo' | 'weather' | 'music' | 'memory' | 'quick' | 'content' | 'speak';
+type Tab = 'todo' | 'weather' | 'music' | 'memory' | 'quick' | 'content' | 'speak' | 'focus';
 
 interface TodoItem {
   id: string;
@@ -32,6 +32,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'quick', label: '快捷' },
   { id: 'content', label: '内容' },
   { id: 'speak', label: '朗读' },
+  { id: 'focus', label: '专注' },
 ];
 
 function css(): string {
@@ -216,6 +217,107 @@ export function installCompanion(ctx: Context): () => void {
     if (tab === 'quick') void renderQuick(body, fail);
     if (tab === 'content') void renderContent(body, fail);
     if (tab === 'speak') void renderSpeak(body, fail);
+    if (tab === 'focus') renderFocus(body, fail);
+  };
+
+  // ---- 番茄钟：状态挂在面板实例上，切 tab / 关面板都不丢 ----
+  const pomo = { minutes: 25, remaining: 25 * 60, running: false, endAt: 0, timer: undefined as number | undefined };
+  const beep = (): void => {
+    try {
+      const AudioCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtor) return;
+      const audio = new AudioCtor();
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.frequency.value = 880;
+      gain.gain.value = 0.15;
+      osc.connect(gain).connect(audio.destination);
+      osc.start();
+      osc.stop(audio.currentTime + 0.35);
+      window.setTimeout(() => void audio.close().catch(() => {}), 600);
+    } catch {
+      /* 不能响就算了 */
+    }
+  };
+  const stopPomoTimer = (): void => {
+    if (pomo.timer !== undefined) window.clearInterval(pomo.timer);
+    pomo.timer = undefined;
+  };
+  const focusText = (): string => {
+    const m = Math.floor(pomo.remaining / 60);
+    const sec = pomo.remaining % 60;
+    return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  };
+  const refreshFocus = (): void => {
+    const node = document.getElementById('dpp-focus-time');
+    if (node) node.textContent = focusText();
+    const state = document.getElementById('dpp-focus-state');
+    if (state) state.textContent = pomo.running ? '专注中' : pomo.remaining === 0 ? '已结束' : '待开始';
+    const start = document.getElementById('dpp-focus-start') as HTMLButtonElement | null;
+    if (start) start.textContent = pomo.running ? '暂停' : '开始';
+  };
+  const tickPomo = (): void => {
+    if (!pomo.running) return;
+    pomo.remaining = Math.max(0, Math.round((pomo.endAt - Date.now()) / 1000));
+    if (pomo.remaining <= 0) {
+      pomo.running = false;
+      stopPomoTimer();
+      beep();
+      toast('专注结束，起来走走 ☕');
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification('大肥鱼 · 专注结束', { body: '这一轮完成了，休息五分钟吧。' });
+      }
+    }
+    refreshFocus();
+  };
+  const startPomo = (minutes: number): void => {
+    stopPomoTimer();
+    pomo.minutes = minutes;
+    pomo.remaining = minutes * 60;
+    pomo.running = false;
+    refreshFocus();
+  };
+  const togglePomo = (): void => {
+    if (pomo.running) {
+      pomo.remaining = Math.max(0, Math.round((pomo.endAt - Date.now()) / 1000));
+      pomo.running = false;
+      stopPomoTimer();
+    } else {
+      if (pomo.remaining <= 0) pomo.remaining = pomo.minutes * 60;
+      pomo.endAt = Date.now() + pomo.remaining * 1000;
+      pomo.running = true;
+      stopPomoTimer();
+      pomo.timer = window.setInterval(tickPomo, 1000);
+    }
+    refreshFocus();
+  };
+  const renderFocus = (target: HTMLDivElement, fail: Fail): void => {
+    target.innerHTML =
+      `<div class="dpp-card" style="text-align:center"><div id="dpp-focus-time" style="font-size:34px;font-variant-numeric:tabular-nums;letter-spacing:2px">${focusText()}</div>` +
+      `<div class="dpp-dim" id="dpp-focus-state">${pomo.running ? '专注中' : pomo.remaining === 0 ? '已结束' : '待开始'}</div></div>` +
+      '<div class="dpp-actions">' +
+      '<button class="dpp-chip" data-min="25" type="button">25 分钟</button>' +
+      '<button class="dpp-chip" data-min="45" type="button">45 分钟</button>' +
+      '<button class="dpp-chip" data-min="5" type="button">5 分钟休息</button>' +
+      '</div><div class="dpp-actions">' +
+      '<button class="dpp-primary" id="dpp-focus-start" type="button">开始</button>' +
+      '<button class="dpp-chip" id="dpp-focus-reset" type="button">重置</button></div>';
+    target.querySelector('#dpp-focus-start')?.addEventListener('click', () => togglePomo());
+    target.querySelector('#dpp-focus-reset')?.addEventListener('click', () => {
+      stopPomoTimer();
+      pomo.running = false;
+      pomo.remaining = pomo.minutes * 60;
+      refreshFocus();
+    });
+    target.querySelectorAll<HTMLButtonElement>('[data-min]').forEach((button) => {
+      button.addEventListener('click', () => startPomo(Number(button.dataset.min ?? 25)));
+    });
+    refreshFocus();
+    if (pomo.running) {
+      stopPomoTimer();
+      pomo.timer = window.setInterval(tickPomo, 1000);
+    }
+    void fail;
   };
 
   const toggle = (tab: Tab = current ?? 'todo'): void => {
@@ -404,6 +506,7 @@ export function installCompanion(ctx: Context): () => void {
 
   return () => {
     stopTimer();
+    stopPomoTimer();
     disposeShortcut?.();
     window.removeEventListener('keydown', onKey, true);
     window.removeEventListener('dsh-pet-plus:open-companion', onOpenCompanion);
