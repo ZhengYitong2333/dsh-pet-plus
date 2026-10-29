@@ -94,6 +94,24 @@
 > 平台 DOM 会变，选择器集中在 `src/host/content/platforms.ts`，失效时改这里即可。
 > 本项目不会内置账号、cookie 或代理。
 
+### 选择器实机校准
+
+先按上面的命令带着调试端口启动 Chrome 并登录，然后：
+
+```bash
+pnpm check:selectors --port 9222 --platform douyin
+pnpm check:selectors --port 9222 --platform xhs
+```
+
+输出会逐个列出 `feedCards / commentButton / commentInput / submitButton` 的命中数：
+
+- 全部 `✓`：选择器可用，可以试 `dryRun`；
+- 某项 `✗ 0 个`：先确认页面停在首页/推荐流、已登录；仍是 0 就按页面实际 DOM 改
+  `src/host/content/platforms.ts`，再跑一次；
+- `-1`：选择器语法错误。
+
+脚本只读 DOM，不滚动、不点击、不发送。
+
 ---
 
 ## 3. 日志

@@ -149,10 +149,12 @@ cd dsh-pet-plus
 pnpm install
 pnpm build
 
-dsh plugin --profile desktop add link:$PWD
+# 自动 link + 写入 bundles（web / desktop 二选一）
+node scripts/install-local.mjs --profile web
+# node scripts/install-local.mjs --profile desktop
 ```
 
-然后在 `~/.dsh/profiles/desktop/package.json` 的 `dsh.profile.bundles` 里加入 `dsh-pet-plus`，重启 DSH。
+重启 DSH 后刷新页面。手动安装、验证与卸载见 [安装与加载](docs/install.md)。
 
 > 需要 Node.js ≥ 22.13；首次安装依赖走 `registry.npmmirror.com`（可在 `.npmrc` 改）。
 

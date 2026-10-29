@@ -41,6 +41,11 @@
 - 灵动岛：顶部状态胶囊，工作状态 / 待办 / 音乐 / 记忆条数。
 - 每宠物点击音效与点击余额开关（60s 冷却）。
 
+### 安装与平台校准
+
+- `scripts/install-local.mjs`：一键 link + 写入 `dsh.profile.bundles`，附安装/验证/卸载文档；
+- `pnpm check:selectors`：连接已登录的调试 Chrome，逐项检查抖音/小红书选择器命中数。
+
 ### 文档与预览
 
 - 伴侣面板与全局热键小窗的实拍预览图（`docs/assets/*.png`）；

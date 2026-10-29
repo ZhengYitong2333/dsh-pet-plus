@@ -76,11 +76,10 @@ git clone git@github.com:ZhengYitong2333/dsh-pet-plus.git
 cd dsh-pet-plus
 pnpm install
 pnpm build
-
-dsh plugin --profile desktop add link:$PWD
+node scripts/install-local.mjs --profile web
 ```
 
-Add `dsh-pet-plus` to `dsh.profile.bundles` in `~/.dsh/profiles/desktop/package.json`, then restart DSH.
+Restart DSH and refresh the page. See [install guide](docs/install.md) for manual steps, verification and uninstall.
 
 Requires Node.js ≥ 22.13. The default registry is `registry.npmmirror.com` (change it in `.npmrc`).
 

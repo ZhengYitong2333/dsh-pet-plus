@@ -69,7 +69,8 @@
     "gen:gifs": "node scripts/gen-gifs.mjs",
     "prepack": "npm run build && node scripts/prepack-check.js && npm run check:secrets",
     "start:desktop": "node scripts/start-desktop.mjs",
-    "gen:preview": "node scripts/gen-preview.mjs"
+    "gen:preview": "node scripts/gen-preview.mjs",
+    "check:selectors": "node --experimental-strip-types scripts/check-selectors.mjs"
   },
   "license": "MIT",
   "engines": {
