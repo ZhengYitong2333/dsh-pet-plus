@@ -32,6 +32,14 @@ const btnStyle = {
   fontSize: 12,
 };
 
+function splitList(value: string): string[] {
+  return value
+    .split(/[,，\s]+/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 50);
+}
+
 export function makeExtrasSection(react: {
   useState: typeof import('react').useState;
   useEffect: typeof import('react').useEffect;
@@ -52,6 +60,22 @@ export function makeExtrasSection(react: {
     const [sound, setSound] = useState({ enabled: true, volume: 0.7 });
     const [city, setCity] = useState('');
     const [qr, setQr] = useState<{ qrcode: string; url: string } | undefined>();
+    const [profile, setProfile] = useState<
+      Array<{ id: string; text: string; layer: string; importance: number; archived: boolean; rev: number }>
+    >([]);
+    const [newMemory, setNewMemory] = useState('');
+    const [logs, setLogs] = useState<Array<Record<string, unknown>>>([]);
+    const [imCfg, setImCfg] = useState({
+      weixinEnabled: false,
+      weixinMode: 'off',
+      ilinkAllowFrom: '',
+      bridgeUrl: '',
+      qqEnabled: false,
+      qqBaseUrl: '',
+      qqSelfId: '',
+      qqAllowFrom: '',
+      autoReply: true,
+    });
 
     useEffect(() => {
       void (async () => {
@@ -63,6 +87,22 @@ export function makeExtrasSection(react: {
           const autoCfg = (content.auto ?? {}) as Record<string, unknown>;
           const p1 = (main.p1 ?? {}) as Record<string, unknown>;
           const weather = (p1.weather ?? {}) as Record<string, unknown>;
+          const imMain = (main.im ?? {}) as Record<string, unknown>;
+          const wx = (imMain.weixin ?? {}) as Record<string, unknown>;
+          const ilink = (wx.ilink ?? {}) as Record<string, unknown>;
+          const bridge = (wx.bridge ?? {}) as Record<string, unknown>;
+          const qq = (imMain.qq ?? {}) as Record<string, unknown>;
+          setImCfg({
+            weixinEnabled: wx.enabled === true,
+            weixinMode: typeof wx.mode === 'string' ? wx.mode : 'off',
+            ilinkAllowFrom: Array.isArray(ilink.allowFrom) ? (ilink.allowFrom as string[]).join(',') : '',
+            bridgeUrl: typeof bridge.outboundUrl === 'string' ? bridge.outboundUrl : '',
+            qqEnabled: qq.enabled === true,
+            qqBaseUrl: typeof qq.baseUrl === 'string' ? qq.baseUrl : '',
+            qqSelfId: typeof qq.selfId === 'string' ? qq.selfId : '',
+            qqAllowFrom: Array.isArray(qq.allowFrom) ? (qq.allowFrom as string[]).join(',') : '',
+            autoReply: qq.autoReply !== false,
+          });
           setSound({
             enabled: main.clickSoundEnabled !== false,
             volume: Number(main.clickSoundVolume ?? 0.7),
@@ -73,12 +113,27 @@ export function makeExtrasSection(react: {
             dryRun: autoCfg.dryRun !== false,
           });
           setCity(typeof weather.city === 'string' ? weather.city : '');
-          const [stats, inst, cstatus, is] = await Promise.all([
+          const [stats, inst, cstatus, is, prof, logRes] = await Promise.all([
             fetch('/dsh-pet-plus/memory/stats').then((r) => r.json()),
             fetch('/dsh-pet-plus/memory/instructions').then((r) => r.json()),
             fetch('/dsh-pet-plus/content/status').then((r) => r.json()),
             fetch('/dsh-pet-plus/im/status').then((r) => r.json()),
+            fetch('/dsh-pet-plus/memory/profile?includeArchived=1').then((r) => r.json()),
+            fetch('/dsh-pet-plus/content/auto/logs').then((r) => r.json()),
           ]);
+          setProfile(
+            Array.isArray((prof as { entries?: unknown[] }).entries)
+              ? ((prof as { entries: Array<Record<string, unknown>> }).entries.map((e) => ({
+                  id: String(e.id ?? ''),
+                  text: String(e.text ?? ''),
+                  layer: String(e.layer ?? 'L2'),
+                  importance: Number(e.importance ?? 0),
+                  archived: e.archived === true,
+                  rev: Number(e.rev ?? 0),
+                })) as typeof profile)
+              : [],
+          );
+          setLogs(Array.isArray((logRes as { logs?: unknown[] }).logs) ? ((logRes as { logs: Array<Record<string, unknown>> }).logs) : []);
           setMem({
             enabled: memory.enabled !== false,
             chars: Number((stats as { instructions?: { chars?: number } }).instructions?.chars ?? 0),
@@ -103,6 +158,21 @@ export function makeExtrasSection(react: {
             memory: { enabled: mem.enabled },
             content: { auto },
             p1: { weather: { city } },
+            im: {
+              weixin: {
+                enabled: imCfg.weixinEnabled,
+                mode: imCfg.weixinMode,
+                ilink: { allowFrom: splitList(imCfg.ilinkAllowFrom) },
+                bridge: { outboundUrl: imCfg.bridgeUrl },
+              },
+              qq: {
+                enabled: imCfg.qqEnabled,
+                baseUrl: imCfg.qqBaseUrl,
+                selfId: imCfg.qqSelfId,
+                allowFrom: splitList(imCfg.qqAllowFrom),
+                autoReply: imCfg.autoReply,
+              },
+            },
             clickSoundEnabled: sound.enabled,
             clickSoundVolume: sound.volume,
             clickSoundPack: { kind: 'builtin', id: 'default', path: '' },
@@ -129,6 +199,54 @@ export function makeExtrasSection(react: {
           const next = (await res.json()) as { version?: number };
           setMem((m) => ({ ...m, version: Number(next.version ?? m.version) }));
         }
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    const addMemory = async () => {
+      const text = newMemory.trim();
+      if (!text) return;
+      setBusy(true);
+      try {
+        const res = (await fetch('/dsh-pet-plus/memory/profile', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ text }),
+        }).then((r) => r.json())) as { ok?: boolean; entry?: (typeof profile)[number] };
+        if (res.ok && res.entry) {
+          setProfile((list) => [res.entry as (typeof profile)[number], ...list]);
+          setNewMemory('');
+          setMsg('已记住');
+        } else {
+          setMsg('添加失败（可能已被删除过）');
+        }
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    const forgetMemory = async (id: string) => {
+      setBusy(true);
+      try {
+        const res = await fetch('/dsh-pet-plus/memory/profile/' + encodeURIComponent(id) + '/forget', { method: 'POST' });
+        if (res.ok) {
+          setProfile((list) => list.map((e) => (e.id === id ? { ...e, archived: true } : e)));
+          setMsg('已删除并写入墓碑');
+        } else setMsg('删除失败');
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    const restoreMemory = async (id: string) => {
+      setBusy(true);
+      try {
+        const res = await fetch('/dsh-pet-plus/memory/profile/' + encodeURIComponent(id) + '/restore', { method: 'POST' });
+        if (res.ok) {
+          setProfile((list) => list.map((e) => (e.id === id ? { ...e, archived: false } : e)));
+          setMsg('已恢复');
+        } else setMsg('恢复失败');
       } finally {
         setBusy(false);
       }
@@ -200,6 +318,59 @@ export function makeExtrasSection(react: {
           h('button', { style: btnStyle, onClick: () => void saveInstructions(), disabled: busy }, '保存记忆指令'),
           h('button', { style: btnStyle, onClick: () => void saveExtras(), disabled: busy }, '保存开关'),
         ),
+        h('h4', { style: { fontSize: 13, margin: '14px 0 6px' } }, `长期画像（${profile.filter((e) => !e.archived).length} 条生效）`),
+        h(
+          'div',
+          { style: { display: 'flex', gap: 8 } },
+          h('input', {
+            value: newMemory,
+            placeholder: '手动记一条，例如：我对花生过敏',
+            style: { ...inputStyle, flex: 1 },
+            onChange: (e: { target: { value: string } }) => setNewMemory(e.target.value),
+          }),
+          h('button', { style: btnStyle, onClick: () => void addMemory(), disabled: busy }, '记住'),
+        ),
+        h(
+          'div',
+          { style: { marginTop: 8, maxHeight: 220, overflow: 'auto' } },
+          profile.length === 0
+            ? h('p', { style: { fontSize: 12, opacity: 0.6 } }, '还没有长期记忆。')
+            : profile.map((entry) =>
+                h(
+                  'div',
+                  {
+                    key: entry.id,
+                    style: {
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 8,
+                      padding: '6px 0',
+                      borderBottom: '1px solid rgba(148,163,184,.15)',
+                      opacity: entry.archived ? 0.45 : 1,
+                    },
+                  },
+                  h(
+                    'span',
+                    { style: { fontSize: 10, color: '#a5b4fc', minWidth: 20, marginTop: 2 } },
+                    entry.layer,
+                  ),
+                  h(
+                    'span',
+                    { style: { flex: 1, fontSize: 12, lineHeight: 1.5, textDecoration: entry.archived ? 'line-through' : 'none' } },
+                    entry.text,
+                  ),
+                  h(
+                    'button',
+                    {
+                      style: { ...btnStyle, padding: '2px 8px', fontSize: 11 },
+                      onClick: () => void (entry.archived ? restoreMemory(entry.id) : forgetMemory(entry.id)),
+                      disabled: busy,
+                    },
+                    entry.archived ? '恢复' : '忘记',
+                  ),
+                ),
+              ),
+        ),
       ),
       h(
         'section',
@@ -252,13 +423,135 @@ export function makeExtrasSection(react: {
           ),
         ),
         h('p', { style: { fontSize: 12, opacity: 0.7, margin: '6px 0 0' } }, JSON.stringify(contentStatus.status ?? {})),
+        h(
+          'div',
+          { style: { display: 'flex', gap: 8, marginTop: 8 } },
+          h(
+            'button',
+            {
+              style: btnStyle,
+              onClick: async () => {
+                const res = (await fetch('/dsh-pet-plus/content/auto/logs').then((r) => r.json())) as {
+                  logs?: Array<Record<string, unknown>>;
+                };
+                setLogs(Array.isArray(res.logs) ? res.logs : []);
+              },
+            },
+            '刷新日志',
+          ),
+        ),
+        h(
+          'div',
+          { style: { maxHeight: 160, overflow: 'auto', marginTop: 6, fontSize: 11, opacity: 0.75 } },
+          logs.length === 0
+            ? h('p', null, '还没有自动模式日志。')
+            : logs
+                .slice(-30)
+                .reverse()
+                .map((entry, index) =>
+                  h(
+                    'div',
+                    { key: index, style: { padding: '2px 0', borderBottom: '1px solid rgba(148,163,184,.1)' } },
+                    JSON.stringify(entry),
+                  ),
+                ),
+        ),
       ),
       h(
         'section',
         { style: cardStyle },
         h('h3', { style: { fontSize: 14, margin: '0 0 6px' } }, '微信 / QQ'),
         h('p', { style: { fontSize: 12, opacity: 0.8 } }, JSON.stringify(im)),
-        h('button', { style: btnStyle, onClick: () => void bind() }, '扫码绑定微信 ClawBot'),
+        row(
+          '微信启用',
+          h('input', {
+            type: 'checkbox',
+            checked: imCfg.weixinEnabled,
+            onChange: (e: { target: { checked: boolean } }) => setImCfg((c) => ({ ...c, weixinEnabled: e.target.checked })),
+          }),
+        ),
+        row(
+          '微信模式',
+          h(
+            'select',
+            {
+              value: imCfg.weixinMode,
+              style: { ...inputStyle, width: 180 },
+              onChange: (e: { target: { value: string } }) => setImCfg((c) => ({ ...c, weixinMode: e.target.value })),
+            },
+            h('option', { value: 'off' }, '关闭'),
+            h('option', { value: 'ilink' }, 'ClawBot / iLink 直连'),
+            h('option', { value: 'bridge' }, '自建桥'),
+          ),
+        ),
+        row(
+          'iLink 白名单',
+          h('input', {
+            value: imCfg.ilinkAllowFrom,
+            placeholder: '逗号分隔，留空 = 不限制',
+            style: { ...inputStyle, width: 260 },
+            onChange: (e: { target: { value: string } }) => setImCfg((c) => ({ ...c, ilinkAllowFrom: e.target.value })),
+          }),
+        ),
+        row(
+          '桥出站地址',
+          h('input', {
+            value: imCfg.bridgeUrl,
+            placeholder: 'https://...',
+            style: { ...inputStyle, width: 260 },
+            onChange: (e: { target: { value: string } }) => setImCfg((c) => ({ ...c, bridgeUrl: e.target.value })),
+          }),
+        ),
+        row(
+          'QQ 启用',
+          h('input', {
+            type: 'checkbox',
+            checked: imCfg.qqEnabled,
+            onChange: (e: { target: { checked: boolean } }) => setImCfg((c) => ({ ...c, qqEnabled: e.target.checked })),
+          }),
+        ),
+        row(
+          'QQ OneBot 地址',
+          h('input', {
+            value: imCfg.qqBaseUrl,
+            placeholder: 'http://127.0.0.1:3000',
+            style: { ...inputStyle, width: 260 },
+            onChange: (e: { target: { value: string } }) => setImCfg((c) => ({ ...c, qqBaseUrl: e.target.value })),
+          }),
+        ),
+        row(
+          'QQ 机器人 QQ 号',
+          h('input', {
+            value: imCfg.qqSelfId,
+            placeholder: '123456789',
+            style: { ...inputStyle, width: 200 },
+            onChange: (e: { target: { value: string } }) => setImCfg((c) => ({ ...c, qqSelfId: e.target.value })),
+          }),
+        ),
+        row(
+          'QQ 白名单',
+          h('input', {
+            value: imCfg.qqAllowFrom,
+            placeholder: '逗号分隔 QQ 号，留空 = 不限制',
+            style: { ...inputStyle, width: 240 },
+            onChange: (e: { target: { value: string } }) => setImCfg((c) => ({ ...c, qqAllowFrom: e.target.value })),
+          }),
+        ),
+        row(
+          'QQ 自动回复',
+          h('input', {
+            type: 'checkbox',
+            checked: imCfg.autoReply,
+            onChange: (e: { target: { checked: boolean } }) => setImCfg((c) => ({ ...c, autoReply: e.target.checked })),
+          }),
+        ),
+        h('p', { style: { fontSize: 11, opacity: 0.55, margin: '4px 0' } }, '密钥（accessToken / inboundSecret）只从凭据库或环境变量读取，不会写进配置文件。'),
+        h(
+          'div',
+          { style: { display: 'flex', gap: 8, marginTop: 6 } },
+          h('button', { style: btnStyle, onClick: () => void saveExtras(), disabled: busy }, '保存 IM 设置'),
+          h('button', { style: btnStyle, onClick: () => void bind() }, '扫码绑定微信 ClawBot'),
+        ),
         qr
           ? h(
               'p',
@@ -267,7 +560,6 @@ export function makeExtrasSection(react: {
               h('a', { href: qr.url, target: '_blank', rel: 'noreferrer' }, qr.url || qr.qrcode),
             )
           : null,
-        h('p', { style: { fontSize: 12, opacity: 0.6 } }, 'QQ / 桥的地址、白名单在 main-config.jsonc 的 im 段配置。'),
       ),
       h(
         'section',

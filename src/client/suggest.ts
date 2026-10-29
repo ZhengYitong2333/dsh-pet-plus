@@ -11,6 +11,26 @@ interface SuggestOption {
 }
 
 const STYLE_ID = 'dsh-pet-plus/suggest.css';
+
+/** 最近一次探到的会话 scoped ctx；其它 client 模块（伴侣面板/拖拽即问）复用它把文本填进输入框。 */
+let latestSessionCtx: unknown;
+
+/** 把文本填进当前会话输入框；没有会话时退化为复制到剪贴板。 */
+export function insertIntoLatestSession(text: string): boolean {
+  try {
+    if (!latestSessionCtx) throw new Error('no session');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 服务无静态类型
+    const anyCtx = latestSessionCtx as any;
+    const input = anyCtx.conversation?.input?.for?.(latestSessionCtx);
+    if (!input || typeof input.setDraft !== 'function') throw new Error('no input facade');
+    input.setDraft(text);
+    input.focus?.();
+    return true;
+  } catch {
+    void navigator.clipboard?.writeText(text).catch(() => {});
+    return false;
+  }
+}
 const POPUP_ID = 'dsh-pet-plus-suggest';
 
 function ensureStyle(): void {
@@ -59,25 +79,9 @@ async function fetchOptions(refresh: boolean): Promise<{ options: string[]; sour
 }
 
 export function installSuggest(ctx: Context): () => void {
-  let latestSession: unknown;
   let busy = false;
 
-  const insertText = (text: string): boolean => {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 服务无静态类型
-      const anyCtx = ctx as any;
-      const actx = latestSession;
-      if (!actx) throw new Error('no session');
-      const input = anyCtx.conversation?.input?.for?.(actx);
-      if (!input || typeof input.setDraft !== 'function') throw new Error('no input facade');
-      input.setDraft(text);
-      input.focus?.();
-      return true;
-    } catch {
-      void navigator.clipboard?.writeText(text).catch(() => {});
-      return false;
-    }
-  };
+  const insertText = (text: string): boolean => insertIntoLatestSession(text);
 
   const show = async (refresh = false): Promise<void> => {
     if (busy) return;
@@ -162,7 +166,7 @@ export function installSuggest(ctx: Context): () => void {
           order: 999,
           inject: (sessionId: string) => {
             try {
-              latestSession = anyCtx.sessions?.scope?.(sessionId) ?? latestSession;
+              latestSessionCtx = anyCtx.sessions?.scope?.(sessionId) ?? latestSessionCtx;
             } catch {
               /* ignore */
             }

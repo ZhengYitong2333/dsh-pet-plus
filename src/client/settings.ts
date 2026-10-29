@@ -229,6 +229,8 @@ export const zh = {
   personaCount: '{n} 字',
   balanceEnabled: '余额功能',
   balanceEnabledHint: '启用后该宠物触发余额动画并显示余额气泡。',
+  clickBalanceEnabled: '点击余额',
+  clickBalanceEnabledHint: '启用后点一下这只宠物会刷新并弹出余额气泡；关闭则只播放点击动作。',
   whisperEnabled: '碎碎念',
   whisperEnabledHint: '启用后该宠物按周期用 AI 生成一句话并播碎碎念动画（人设见下方「人设」框，留空跟随条目）。',
   workStatusEnabled: '工作状态联动',
@@ -406,6 +408,8 @@ export const en = {
   personaCount: '{n} chars',
   balanceEnabled: 'Balance',
   balanceEnabledHint: 'When enabled, this pet plays balance animations and shows the balance bubble.',
+  clickBalanceEnabled: 'Click for balance',
+  clickBalanceEnabledHint: 'When enabled, clicking this pet refreshes and shows the balance bubble; otherwise it only plays the click animation.',
   whisperEnabled: 'Whisper',
   whisperEnabledHint:
     'When enabled, this pet periodically generates a line via AI and plays the whisper animation (persona = the field below; empty follows the entry).',
@@ -1640,6 +1644,9 @@ export function makePetConfigSection(rt: {
                   className: 'dsh-pet-cfg__grid4',
                   children: [
                     toggleCell('balanceEnabled', !!cur.balanceEnabled, busy, (v) => updateSel({ balanceEnabled: v })),
+                    toggleCell('clickBalanceEnabled', !!cur.clickBalanceEnabled, busy, (v) =>
+                      updateSel({ clickBalanceEnabled: v }),
+                    ),
                     toggleCell('whisperEnabled', !!cur.whisperEnabled, busy, (v) => updateSel({ whisperEnabled: v })),
                     toggleCell('workStatusEnabled', !!cur.workStatusEnabled, busy, (v) =>
                       updateSel({ workStatusEnabled: v }),
