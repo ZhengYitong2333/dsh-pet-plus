@@ -598,28 +598,37 @@ async function renderTodo(body: HTMLDivElement, fail: Fail): Promise<void> {
 }
 
 async function renderWeather(body: HTMLDivElement, fail: Fail): Promise<void> {
-  const res = await api<{
-    ok?: boolean;
-    city?: string;
-    description?: string;
-    temperature?: number;
-    apparent?: number;
-    min?: number;
-    max?: number;
-    message?: string;
-  }>('/weather').catch((e) => {
-    fail(e);
-    return undefined;
-  });
+  const [res, festival] = await Promise.all([
+    api<{
+      ok?: boolean;
+      city?: string;
+      description?: string;
+      temperature?: number;
+      apparent?: number;
+      min?: number;
+      max?: number;
+      message?: string;
+    }>('/weather').catch((e) => {
+      fail(e);
+      return undefined;
+    }),
+    api<{ date?: string; name?: string; note?: string; weekday?: string }>('/festival').catch(() => undefined),
+  ]);
   if (!res) return;
+  const day = festival
+    ? `<div class="dpp-dim">${esc(festival.date ?? '')} ${esc(festival.weekday ?? '')}${
+        festival.name ? ' · ' + esc(festival.name) + (festival.note ? '：' + esc(festival.note) : '') : ''
+      }</div>`
+    : '';
   if (!res.ok) {
     body.innerHTML = `<div class="dpp-err">${esc(res.message ?? '天气获取失败')}</div>
-      <div class="dpp-dim">在设置 → 桌宠 Plus 里填一个城市名即可。</div>`;
+      <div class="dpp-dim">在设置 → 桌宠 Plus 里填一个城市名即可。</div>${day}`;
     return;
   }
   body.innerHTML =
     `<div class="dpp-card"><b>${esc(res.city ?? '')}</b> · ${esc(res.description ?? '')} ${res.temperature}°C</div>` +
     `<div class="dpp-dim">体感 ${res.apparent}°C · 今日 ${res.min}~${res.max}°C</div>` +
+    day +
     '<div class="dpp-actions"><button class="dpp-chip" type="button" id="dpp-w-refresh">刷新</button></div>';
   body.querySelector('#dpp-w-refresh')?.addEventListener('click', () => void renderWeather(body, fail));
 }
