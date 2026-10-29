@@ -45,7 +45,7 @@ try {
   );
   process.exit(3);
 }
-const { app, BrowserWindow, ipcMain, screen, shell, protocol, Tray, Menu, nativeImage } = electronApi;
+const { app, BrowserWindow, ipcMain, screen, shell, protocol, Tray, Menu, nativeImage, globalShortcut, clipboard } = electronApi;
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
@@ -758,6 +758,72 @@ async function startTray() {
   }
 }
 
+/** 全局热键三候选小窗（单例）：主进程只负责开窗/转发，内容由 suggest.js 渲染。 */
+let suggestWin;
+/** 最近一次候选：小窗重开或刚创建时补发，避免 ready-to-show 与 IPC 竞态。 */
+let suggestOptions = [];
+
+function openSuggestWindow(options) {
+  suggestOptions = Array.isArray(options) ? options.filter((x) => typeof x === 'string' && x.trim()).slice(0, 3) : [];
+  if (suggestWin && !suggestWin.isDestroyed()) {
+    suggestWin.webContents.send('suggest:data', suggestOptions);
+    suggestWin.show();
+    suggestWin.focus();
+    return;
+  }
+  const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  const width = 380;
+  const height = 246;
+  suggestWin = new BrowserWindow({
+    width,
+    height,
+    x: Math.round(area.x + (area.width - width) / 2),
+    y: Math.round(area.y + Math.max(40, area.height * 0.12)),
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    hasShadow: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  suggestWin.setAlwaysOnTop(true, topmostLevel(process.platform));
+  suggestWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  suggestWin.webContents.on('did-finish-load', () => {
+    suggestWin.webContents.send('suggest:data', suggestOptions);
+  });
+  suggestWin.once('ready-to-show', () => {
+    suggestWin.show();
+    suggestWin.focus();
+  });
+  suggestWin.on('closed', () => {
+    suggestWin = undefined;
+  });
+  void suggestWin.loadFile(path.join(__dirname, 'suggest.html'));
+}
+
+function registerGlobalShortcut() {
+  const accelerator = process.env.DSH_PET_GLOBAL_SHORTCUT || 'CommandOrControl+Alt+Shift+K';
+  try {
+    const ok = globalShortcut.register(accelerator, () => {
+      for (const win of windows.values()) {
+        if (!win.isDestroyed()) win.webContents.send('pet:global-shortcut');
+      }
+    });
+    if (!ok) console.error('[dsh-pet-desktop-helper] global shortcut register failed: ' + accelerator);
+    else console.error('[dsh-pet-desktop-helper] global shortcut: ' + accelerator);
+  } catch (e) {
+    console.error('[dsh-pet-desktop-helper] global shortcut error: ' + String(e && e.message ? e.message : e));
+  }
+}
+
 app.whenReady().then(() => {
   // 探测子进程：此时没有 force-device-scale-factor，读到的是 Windows 的真实主屏缩放。
   // 退出推迟一拍——在 ready 回调里直接 app.exit() 会赶在 stdout 落盘前拆掉进程
@@ -798,6 +864,7 @@ app.whenReady().then(() => {
   void startTray();
 
   createPetWindows();
+  registerGlobalShortcut();
 
   // 宠物窗口跟随：renderer 逐帧上报窗口内容区位置/尺寸
   ipcMain.on('pet:set-bounds', (event, bounds) => {
@@ -942,6 +1009,23 @@ app.whenReady().then(() => {
   //     比 spawn 宿主 exe 干净——不必处理 ELECTRON_RUN_AS_NODE（spawn 继承它就成了 node 模式，起不了界面）
   //     与安装路径探测。
   //   site（dsh web / 独立模式）→ 原行为：系统默认浏览器打开站点。
+  // 全局热键三候选：宠物窗口拉到候选后交给主进程开小窗；小窗点击写剪贴板并关闭。
+  ipcMain.on('pet:suggest-options', (event, options) => {
+    if (!BrowserWindow.fromWebContents(event.sender)) return;
+    openSuggestWindow(options);
+  });
+  ipcMain.on('pet:copy-text', (event, text) => {
+    if (!BrowserWindow.fromWebContents(event.sender)) return;
+    try {
+      clipboard.writeText(String(text ?? ''));
+    } catch (e) {
+      console.error('[dsh-pet-desktop-helper] clipboard write failed: ' + String(e && e.message ? e.message : e));
+    }
+  });
+  ipcMain.on('pet:close-suggest', () => {
+    if (suggestWin && !suggestWin.isDestroyed()) suggestWin.close();
+  });
+
   ipcMain.on('pet:open-site', (event, payload) => {
     const url = payload && typeof payload === 'object' ? String(payload.url || '') : '';
     if (!/^https?:[/][/]/.test(url)) return;
@@ -1221,6 +1305,11 @@ app.whenReady().then(() => {
 // 注意宿主改 display 时是 SIGTERM/SIGKILL 硬杀（helper-process.ts），Windows 上那是
 // TerminateProcess、拦不到，所以这条只覆盖优雅退出（窗口全关、宿主存活探测判定退出等）。
 app.on('before-quit', () => {
+  try {
+    globalShortcut.unregisterAll();
+  } catch {
+    /* ignore */
+  }
   if (!tray) return;
   try {
     tray.destroy();

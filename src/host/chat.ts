@@ -43,7 +43,7 @@ import { modelCandidates, modelLabel, type ModelRef } from './model-selection';
 
 /** 生成失败原因（与 shared/whisper.ts 的 WhisperState 失败分支同构） */
 export type ChatGenerateResult =
-  | { ok: true; text: string; image?: string }
+  | { ok: true; text: string; image?: string; firstTokenMs?: number }
   | { ok: false; reason: 'provider-missing' | 'generate-error'; message?: string };
 
 /** 对话工具：schema + 执行器（最多 maxRounds 轮工具调用）。 */
@@ -156,6 +156,9 @@ async function generateWith(
   let messages: RequestMessage[] = [...historyMessages, firstUser];
   const maxRounds = tooling ? Math.max(0, Math.min(2, tooling.maxRounds ?? 1)) : 0;
 
+  // 首 token 延迟埋点：只在第一轮流的第一块计时，工具轮/回落不重复计。
+  const streamStartedAt = Date.now();
+  let firstTokenMs: number | undefined;
   // 工具轮：0 = 普通单次调用；>0 时模型可以调用 recall/read_session，最多 maxRounds 轮。
   for (let round = 0; round <= maxRounds; round++) {
     const deadline = AbortSignal.timeout(TIMEOUT_MS);
@@ -178,6 +181,7 @@ async function generateWith(
     const assembler = new BlockAssembler();
     try {
       for await (const chunk of llm.stream(options)) {
+        if (firstTokenMs === undefined) firstTokenMs = Date.now() - streamStartedAt;
         assembler.push(chunk as Parameters<BlockAssembler['push']>[0]);
       }
     } catch (e) {
@@ -198,9 +202,10 @@ async function generateWith(
     // 没有工具调用 / 没有工具 / 轮次用完 → 以当前文本收尾
     if (calls.length === 0 || !tooling || round === maxRounds) {
       if (!text) return { ok: false, reason: 'generate-error', message: noTextReason(assembler.finish) };
-      if (!wantImage) return { ok: true, text };
+      const timing = firstTokenMs === undefined ? {} : { firstTokenMs };
+      if (!wantImage) return { ok: true, text, ...timing };
       const picked = extractChatImage(text, pool);
-      return picked.image ? { ok: true, text: picked.text, image: picked.image } : { ok: true, text: picked.text };
+      return picked.image ? { ok: true, text: picked.text, image: picked.image, ...timing } : { ok: true, text: picked.text, ...timing };
     }
 
     // 追加 assistant 的 tool-call 消息，再逐条执行并追加 tool 结果

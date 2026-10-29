@@ -66,6 +66,7 @@ export function makeExtrasSection(react: {
     const [newMemory, setNewMemory] = useState('');
     const [preview, setPreview] = useState('');
     const [budget, setBudget] = useState({ calls: 0, tokens: 0, maxCalls: 0, maxTokens: 0 });
+    const [metrics, setMetrics] = useState<Record<string, { count: number; p50: number; p95: number; last: number }>>({});
     const [logs, setLogs] = useState<Array<Record<string, unknown>>>([]);
     const [p2, setP2] = useState({ island: false, music: true, quickLaunch: true, tts: false, ttsVoice: '', ttsRate: 180 });
     const [quick, setQuick] = useState<Array<{ id: string; label: string; type: 'app' | 'url'; target: string }>>([]);
@@ -163,6 +164,10 @@ export function makeExtrasSection(react: {
               : [],
           );
           setLogs(Array.isArray((logRes as { logs?: unknown[] }).logs) ? ((logRes as { logs: Array<Record<string, unknown>> }).logs) : []);
+          const m = (await fetch('/dsh-pet-plus/memory/metrics').then((r) => r.json()).catch(() => ({}))) as {
+            metrics?: typeof metrics;
+          };
+          if (m.metrics) setMetrics(m.metrics);
           setMem({
             enabled: memory.enabled !== false,
             chars: Number((stats as { instructions?: { chars?: number } }).instructions?.chars ?? 0),
@@ -390,6 +395,19 @@ export function makeExtrasSection(react: {
             },
             '清空画像',
           ),
+        ),
+        h(
+          'div',
+          { style: { fontSize: 11, opacity: 0.75, margin: '6px 0' } },
+          ['memory-prep', 'first-token', 'suggest']
+            .map((kind) => {
+              const m = metrics[kind];
+              if (!m || m.count === 0) return '';
+              const label = kind === 'memory-prep' ? '记忆准备' : kind === 'first-token' ? '首 token' : '三候选';
+              return `${label} p50 ${m.p50}ms / p95 ${m.p95}ms（n=${m.count}）`;
+            })
+            .filter(Boolean)
+            .join(' · ') || '延迟样本：暂无',
         ),
         preview
           ? h('pre', {

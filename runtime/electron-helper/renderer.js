@@ -152,6 +152,39 @@ if (window.petBridge && window.petBridge.onDisplays) {
   });
 }
 
+// ---------- 全局热键三候选（P7）----------
+// 主进程 globalShortcut 触发 → 本窗口按当前画像/输入历史拉 /suggest → 主进程开小窗。
+// 小窗点击后写剪贴板（桌面端与浏览器端不共享输入框，剪贴板是不会丢的退路）。
+let globalSuggestBusy = false;
+async function requestGlobalSuggestions() {
+  if (globalSuggestBusy) return;
+  globalSuggestBusy = true;
+  try {
+    const res = await fetch(BASE + '/suggest', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refresh: true }),
+    });
+    const data = await res.json();
+    if (data && data.ok && Array.isArray(data.options) && data.options.length > 0) {
+      if (window.petBridge && window.petBridge.showSuggest) {
+        window.petBridge.showSuggest(data.options.slice(0, 3));
+      } else {
+        console.warn('[dsh-pet] showSuggest unavailable');
+      }
+    } else {
+      console.warn('[dsh-pet] global suggest empty: ' + JSON.stringify(data));
+    }
+  } catch (e) {
+    console.warn('[dsh-pet] global suggest failed: ' + String(e && e.message ? e.message : e));
+  } finally {
+    globalSuggestBusy = false;
+  }
+}
+if (window.petBridge && window.petBridge.onGlobalShortcut) {
+  window.petBridge.onGlobalShortcut(() => void requestGlobalSuggestions());
+}
+
 // 窗口内容区尺寸异常时按当前位置重新规整。
 // 守卫：拖拽/飞行/漫游中**绝不**重设位置——这三种状态下位置由输入或物理驱动，而 position()
 // 会把宠物拉回 customPos（上一次的落点）。跨屏时 Windows 会因 WM_DPICHANGED 主动改窗口尺寸，

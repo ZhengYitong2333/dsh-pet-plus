@@ -70,4 +70,22 @@ contextBridge.exposeInMainWorld('petBridge', {
   onDisplays(cb) {
     ipcRenderer.on('pet:displays', (e, geo) => cb(geo));
   },
+  // ---- 全局热键三候选（P7）----
+  // 主进程 globalShortcut 触发 → 本窗口拉 /suggest → 把三条候选交给主进程开小窗。
+  // 不聚焦 DSH 也能用；小窗点击后写剪贴板（跨进程无法直接填 DSH 输入框，剪贴板是通用退路）。
+  onGlobalShortcut(cb) {
+    ipcRenderer.on('pet:global-shortcut', () => cb());
+  },
+  showSuggest(options) {
+    ipcRenderer.send('pet:suggest-options', options);
+  },
+  copyText(text) {
+    ipcRenderer.send('pet:copy-text', String(text ?? ''));
+  },
+  closeSuggest() {
+    ipcRenderer.send('pet:close-suggest');
+  },
+  onSuggestData(cb) {
+    ipcRenderer.on('suggest:data', (e, options) => cb(options));
+  },
 });

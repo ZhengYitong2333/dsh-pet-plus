@@ -111,6 +111,7 @@ import { createMemoryTools, hasRecallIntent } from './memory/tools';
 import { InputHistoryStore } from './memory/input-history';
 import { extractInputProfile, shouldExtractInputProfile } from './memory/input-profile';
 import { compactMessages } from './memory/compact';
+import { LatencyStore } from './memory/metrics';
 import { generateSuggestions, SuggestCache } from './suggest';
 import { readJsonFile, writeJsonAtomic } from './memory/store';
 import { ImService, imConfigOf } from './im/index';
@@ -334,6 +335,8 @@ export function apply(ctx: any): void {
   const userRoot = join(dshHome, 'dsh-pet-plus');
   // 长期记忆服务（L3 指令层先行；L1/L2 后续接入）
   const memoryService = createMemoryService(userRoot);
+  // 延迟埋点：内存态滚动样本，设置页 /memory/metrics 可见（首 token / 记忆准备 / 三候选）
+  const latency = new LatencyStore();
   // L0：DSH 会话检索（可选服务；默认关闭时降级为 unavailable）
   const inputHistory = new InputHistoryStore(join(userRoot, 'input-history.json'));
   const suggestCache = new SuggestCache();
@@ -833,6 +836,7 @@ export function apply(ctx: any): void {
     | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
   > =>
     withMemoryLock(async () => {
+      const prepStartedAt = Date.now();
       const cfg = readAllConfig(configPaths);
       const found = findPetInstance(cfg, petId);
       // 宠物在"校验那次读"与这里之间被删了——本函数还要先排 withMemoryLock 的串行队列（等前一次生成
@@ -868,6 +872,7 @@ export function apply(ctx: any): void {
         });
         tooling = { tools: tools.tools, execute: tools.execute, maxRounds: 1 };
       }
+      latency.record('memory-prep', Date.now() - prepStartedAt);
       const generated = await generateChat(
         ctx,
         system,
@@ -878,6 +883,7 @@ export function apply(ctx: any): void {
         tooling,
       );
       if (!generated.ok) return generated;
+      if (generated.firstTokenMs !== undefined) latency.record('first-token', generated.firstTokenMs);
       const now = Date.now();
       entry.messages.push({ role: 'user', content: text, ts: now });
       // 记忆只存正文（配图属展示层，不进上下文——否则下次请求会把标记当历史读回去）
@@ -2517,9 +2523,11 @@ export function apply(ctx: any): void {
       if (cached) return { kind: 'json', status: 200, obj: { ok: true, ...cached, cached: true } };
       const limits = { calls: settings.dailyCalls, tokens: settings.dailyTokens };
       const canSpend = memoryService.budget.canSpend(300, limits);
+      const suggestStartedAt = Date.now();
       const result = canSpend
         ? await generateSuggestions(ctx, { system: petSystemPrompt(found), recent, memories })
         : { ok: true as const, options: ['帮我梳理一下现在的进展', '根据我的偏好给点建议', '把刚才的结论压缩成三点'], source: 'template' as const };
+      latency.record('suggest', Date.now() - suggestStartedAt);
       if (!result.ok) {
         return { kind: 'json', status: 200, obj: { ok: false, reason: result.reason, message: result.message } };
       }
@@ -2618,6 +2626,27 @@ export function apply(ctx: any): void {
     }
 
     // L0 会话轨迹：GET /memory/sessions?q=&limit= / GET /memory/sessions/<id>
+    // 延迟报表：只读内存样本，不落盘、不触发模型。
+    if (rest === 'memory/metrics') {
+      if (method === 'GET') {
+        const cfg = readAllConfig(configPaths);
+        const settings = memoryService.settings(cfg.main ?? {});
+        return {
+          kind: 'json',
+          status: 200,
+          obj: {
+            ok: true,
+            metrics: latency.snapshot(),
+            budget: memoryService.budget.snapshot({ calls: settings.dailyCalls, tokens: settings.dailyTokens }),
+          },
+        };
+      }
+      if (method === 'POST') {
+        latency.reset();
+        return { kind: 'json', status: 200, obj: { ok: true } };
+      }
+      return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+    }
     if (rest === 'memory/sessions') {
       if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
       const q = url.searchParams.get('q') ?? '';

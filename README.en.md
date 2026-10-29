@@ -48,6 +48,8 @@ Injection is capped at 1,500 chars per turn by default; if memory is off or empt
 
 `Mod+Alt+K` → three candidates based on your profile, recent inputs and time of day. Click one to put it into the DSH input box. Accepted/discarded suggestions become weak profile signals.
 
+Desktop mode also registers a true global hotkey `⌘/Ctrl+Alt+Shift+K` (override with `DSH_PET_GLOBAL_SHORTCUT`): it works without focusing DSH, opens a small suggestion window, and clicking a candidate copies it to the clipboard.
+
 ### Companion panel
 
 `Mod+Alt+J` or the ✦ button:
@@ -107,7 +109,9 @@ Never commit real keys, tokens, `main-config.jsonc`, memory files, traces or Chr
 - [x] P5 todos / weather / drag-ask / click sound / click balance / screenshot
 - [x] P6 music / quick launch / TTS / memory timeline
 - [x] Dynamic island: top status capsule with next todo, work state, music and memory count
-- [ ] P7 global hotkey, Live2D/VRM, real-platform selector calibration
+- [x] Global hotkey (desktop helper: suggestion window + clipboard fallback)
+- [x] TTFT/token instrumentation with p50/p95 report
+- [ ] P7 Live2D/VRM, plugin marketplace, real-platform selector calibration
 
 ## License
 

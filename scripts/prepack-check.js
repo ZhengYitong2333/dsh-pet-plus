@@ -33,6 +33,8 @@ function main() {
     'runtime/electron-helper/constants.js',
     'runtime/electron-helper/shared-core.js',
     'runtime/electron-helper/sound.js',
+    'runtime/electron-helper/suggest.html',
+    'runtime/electron-helper/suggest.js',
     'runtime/electron-helper/host-liveness.js',
     'runtime/electron-helper/dpi-linearization.js',
     'runtime/electron-helper/pointer-target.js',

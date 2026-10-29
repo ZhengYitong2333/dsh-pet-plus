@@ -102,6 +102,15 @@ describe('generateWhisper —— 配置模型优先、失败回落当前对话',
     assert.deepEqual(calls, [CURRENT]);
   });
 
+  test('成功回复带首 token 延迟（非负毫秒）', async () => {
+    const { ctx } = fakeCtx(CURRENT, { current: 'ok' });
+    const r = await generateChat(ctx, '人设', [], '在吗', [], undefined);
+    assert.equal(r.ok, true);
+    if (r.ok !== true) return;
+    assert.equal(typeof r.firstTokenMs, 'number');
+    assert.ok((r.firstTokenMs ?? -1) >= 0);
+  });
+
   test('两边都拿不到模型 → provider-missing，且一次都不调用 LLM', async () => {
     const { ctx, calls } = fakeCtx('throw', {});
     const r = await generateWhisper(ctx, '人设', undefined, undefined);
@@ -121,15 +130,26 @@ describe('generateChat —— 同一套回落规则（chatModel）', () => {
   test('配置的模型抛错 → 回落到当前对话的模型', async () => {
     const { ctx, calls } = fakeCtx(CURRENT, { configured: 'throw', current: 'ok' });
     const r = await generateChat(ctx, '人设', [], '在吗', [], CONFIGURED);
-    assert.deepEqual(r, { ok: true, text: '你好呀' });
+    assert.equal(r.ok, true);
+    assert.equal(r.ok === true && r.text, '你好呀');
     assert.deepEqual(calls, [CONFIGURED, CURRENT]);
   });
 
   test('留空 → 只用当前对话的模型（旧行为）', async () => {
     const { ctx, calls } = fakeCtx(CURRENT, { current: 'ok' });
     const r = await generateChat(ctx, '人设', [], '在吗', [], undefined);
-    assert.deepEqual(r, { ok: true, text: '你好呀' });
+    assert.equal(r.ok, true);
+    assert.equal(r.ok === true && r.text, '你好呀');
     assert.deepEqual(calls, [CURRENT]);
+  });
+
+  test('成功回复带首 token 延迟（非负毫秒）', async () => {
+    const { ctx } = fakeCtx(CURRENT, { current: 'ok' });
+    const r = await generateChat(ctx, '人设', [], '在吗', [], undefined);
+    assert.equal(r.ok, true);
+    if (r.ok !== true) return;
+    assert.equal(typeof r.firstTokenMs, 'number');
+    assert.ok((r.firstTokenMs ?? -1) >= 0);
   });
 
   test('两边都拿不到模型 → provider-missing，且一次都不调用 LLM', async () => {

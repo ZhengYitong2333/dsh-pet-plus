@@ -366,6 +366,8 @@ export class ImService {
     if (msg.channel === 'qq' && !c.qq.enabled) return;
     if (msg.channel === 'bridge' && !(c.weixin.enabled && c.weixin.mode === 'bridge')) return;
     if (msg.channel === 'ilink' && !(c.weixin.enabled && c.weixin.mode === 'ilink')) return;
+    // QQ 自动回复关闭：仍然接收，但不触发模型、不发送（只作为“静默观察”模式）
+    if (msg.channel === 'qq' && !c.qq.autoReply) return;
     if (!this.allowed(msg.channel, msg)) return;
     if (msg.roomId && msg.mentioned !== true) return;
     const key = msg.channel + ':' + (msg.messageId ?? msg.from + ':' + msg.text.slice(0, 40));
