@@ -110,6 +110,8 @@ import { createSessionRecall, type SessionQueryLike } from './memory/sessions';
 import { createMemoryTools, hasRecallIntent } from './memory/tools';
 import { InputHistoryStore } from './memory/input-history';
 import { generateSuggestions, SuggestCache } from './suggest';
+import { readJsonFile, writeJsonAtomic } from './memory/store';
+import { ImService, imConfigOf } from './im/index';
 import { configuredModel } from './model-selection';
 import { limitPool, pickMeme, readMemePool } from './memes';
 import {
@@ -984,6 +986,33 @@ export function apply(ctx: any): void {
       return activePetId;
     }
   };
+
+  // IM：微信 iLink / 通用桥 / QQ OneBot。入站 → 桌宠对话管线；回复走原通道。
+  const imAccountFile = join(userRoot, 'im', 'ilink-account.json');
+  const imService = new ImService({
+    userRoot,
+    getConfig: () => imConfigOf(readAllConfig(configPaths).main ?? {}),
+    reply: async (text) => {
+      const petId = resolveActivePetId();
+      if (!petId) return undefined;
+      const result = await chatWithPet(petId, text);
+      return result.ok ? result.text : undefined;
+    },
+  });
+  // 重启后若已绑定 iLink 且开关打开，自动恢复长轮询
+  void (async () => {
+    try {
+      const conf = readAllConfig(configPaths).main ?? {};
+      const im = imConfigOf(conf);
+      if (!im.weixin.enabled || im.weixin.mode !== 'ilink') return;
+      const token = await ctx.credentials.resolve(credentialRef('DSH_PET_PLUS_WECHAT_BOT_TOKEN'));
+      if (!token?.value) return;
+      const meta = readJsonFile<{ baseUrl?: string }>(imAccountFile, {});
+      imService.ilink.start(token.value, meta.value?.baseUrl);
+    } catch (error) {
+      console.warn('[dsh-pet-plus] iLink 自动恢复失败：' + String(error));
+    }
+  })();
 
   /** 宠物的显示名（name，缺失回落 id）——命令文案用 */
   const petDisplayName = (pet: Record<string, unknown>): string => {
@@ -2121,6 +2150,121 @@ export function apply(ctx: any): void {
         }
         signal?.addEventListener('abort', onAbort, { once: true });
       });
+    }
+
+    // IM：状态 / iLink 扫码与启停 / QQ 与桥入站 / 主动发送
+    if (rest === 'im/status') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      return { kind: 'json', status: 200, obj: { ok: true, ...imService.status() } };
+    }
+    if (rest === 'im/ilink/qr') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const result = await imService.ilink.qr();
+      return { kind: 'json', status: 200, obj: { ok: result.ok, ...(result.ok ? { qr: result.qr } : { message: result.message }) } };
+    }
+    if (rest === 'im/ilink/qr/status') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const qrcode = url.searchParams.get('qrcode') ?? '';
+      if (!qrcode) return { kind: 'json', status: 400, obj: { ok: false, message: '缺少 qrcode' } };
+      const status = await imService.ilink.qrStatus(qrcode);
+      if (status.status === 'confirmed' && typeof status.bot_token === 'string') {
+        try {
+          await ctx.credentials.set(credentialRef('DSH_PET_PLUS_WECHAT_BOT_TOKEN'), status.bot_token);
+          const baseUrl = typeof status.baseurl === 'string' ? status.baseurl : '';
+          const botId = typeof status.ilink_bot_id === 'string' ? status.ilink_bot_id : '';
+          writeJsonAtomic(imAccountFile, { botId, baseUrl });
+          imService.ilink.start(status.bot_token, baseUrl);
+          return { kind: 'json', status: 200, obj: { ok: true, status: 'confirmed', botId } };
+        } catch (error) {
+          return { kind: 'json', status: 500, obj: { ok: false, message: String(error) } };
+        }
+      }
+      return { kind: 'json', status: 200, obj: { ok: true, status: status.status ?? 'wait' } };
+    }
+    if (rest === 'im/ilink/stop') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      imService.ilink.stop();
+      return { kind: 'json', status: 200, obj: { ok: true } };
+    }
+    if (rest === 'im/ilink/start') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const token = await ctx.credentials.resolve(credentialRef('DSH_PET_PLUS_WECHAT_BOT_TOKEN'));
+      if (!token?.value) return { kind: 'json', status: 200, obj: { ok: false, reason: 'no-token' } };
+      const meta = readJsonFile<{ baseUrl?: string }>(imAccountFile, {});
+      imService.ilink.start(token.value, meta.value?.baseUrl);
+      return { kind: 'json', status: 200, obj: { ok: true } };
+    }
+    if (rest === 'im/qq/event') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let event: Record<string, unknown> = {};
+      try {
+        event = (JSON.parse(body ?? '{}') as Record<string, unknown>) ?? {};
+      } catch {
+        return { kind: 'json', status: 400, obj: { ok: false, message: 'invalid json' } };
+      }
+      const qqConf = imConfigOf(readAllConfig(configPaths).main ?? {}).qq;
+      if (qqConf.eventSecret && String(event.secret ?? '') !== qqConf.eventSecret) {
+        return { kind: 'json', status: 403, obj: { ok: false, message: 'bad secret' } };
+      }
+      if (event.post_type !== 'message') return { kind: 'json', status: 200, obj: { ok: true } };
+      const text = String(event.raw_message ?? '').trim();
+      if (!text) return { kind: 'json', status: 200, obj: { ok: true } };
+      const groupId = event.group_id === undefined ? undefined : String(event.group_id);
+      const msg = {
+        channel: 'qq' as const,
+        from: String(event.user_id ?? ''),
+        roomId: groupId,
+        text,
+        messageId: String(event.message_id ?? ''),
+        mentioned: groupId ? text.includes(String(qqConf.selfId ?? '')) || text.startsWith('@') : true,
+      };
+      void imService.handleInbound(msg);
+      return { kind: 'json', status: 200, obj: { ok: true } };
+    }
+    if (rest === 'im/bridge/event') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let event: Record<string, unknown> = {};
+      try {
+        event = (JSON.parse(body ?? '{}') as Record<string, unknown>) ?? {};
+      } catch {
+        return { kind: 'json', status: 400, obj: { ok: false, message: 'invalid json' } };
+      }
+      const bridgeConf = imConfigOf(readAllConfig(configPaths).main ?? {}).weixin.bridge;
+      if (bridgeConf.inboundSecret && String(event.token ?? '') !== bridgeConf.inboundSecret) {
+        return { kind: 'json', status: 403, obj: { ok: false, message: 'bad token' } };
+      }
+      const from = (event.from ?? {}) as Record<string, unknown>;
+      const msg = {
+        channel: 'bridge' as const,
+        from: String(from.id ?? ''),
+        fromName: typeof from.name === 'string' ? from.name : undefined,
+        roomId: typeof from.roomId === 'string' ? from.roomId : undefined,
+        text: String(event.text ?? '').trim(),
+        messageId: String(event.eventId ?? ''),
+        mentioned: event.mentioned === true,
+      };
+      if (!msg.text) return { kind: 'json', status: 400, obj: { ok: false, message: 'empty text' } };
+      void imService.handleInbound(msg);
+      return { kind: 'json', status: 200, obj: { ok: true } };
+    }
+    if (rest === 'im/send') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let req: Record<string, unknown> = {};
+      try {
+        req = (JSON.parse(body ?? '{}') as Record<string, unknown>) ?? {};
+      } catch {
+        return { kind: 'json', status: 400, obj: { ok: false, message: 'invalid json' } };
+      }
+      const channel = req.channel;
+      if (channel !== 'ilink' && channel !== 'bridge' && channel !== 'qq') {
+        return { kind: 'json', status: 400, obj: { ok: false, message: 'bad channel' } };
+      }
+      const ok = await imService.send(
+        { channel, to: String(req.to ?? ''), roomId: req.roomId ? String(req.roomId) : undefined },
+        String(req.text ?? ''),
+        req.contextToken ? ({ channel, from: String(req.to ?? ''), text: '', contextToken: String(req.contextToken) }) : undefined,
+      );
+      return { kind: 'json', status: 200, obj: { ok } };
     }
 
     // 输入历史：预览 / 清空
