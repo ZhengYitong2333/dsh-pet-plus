@@ -247,6 +247,10 @@ export function installCompanion(ctx: Context): () => void {
     }
   };
   window.addEventListener('keydown', onKey, true);
+  const onOpenCompanion = (): void => {
+    if (panel && panel.hidden) toggle('todo');
+  };
+  window.addEventListener('dsh-pet-plus:open-companion', onOpenCompanion);
 
   // ---- 截图：抓一帧并复制到剪贴板；解释由 DSH 对话里的多模态模型完成 ----
   async function captureScreenshot(): Promise<void> {
@@ -402,6 +406,7 @@ export function installCompanion(ctx: Context): () => void {
     stopTimer();
     disposeShortcut?.();
     window.removeEventListener('keydown', onKey, true);
+    window.removeEventListener('dsh-pet-plus:open-companion', onOpenCompanion);
     document.removeEventListener('drop', onDrop, true);
     document.removeEventListener('paste', onPaste, true);
     closeAsk();

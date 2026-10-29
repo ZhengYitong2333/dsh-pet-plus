@@ -846,7 +846,7 @@ export function saveUserExtras(
 ): boolean {
   const existing = readUserConfig(paths) ?? {};
   const out: Record<string, unknown> = { ...existing };
-  const objects = ['memory', 'content', 'p1', 'im'];
+  const objects = ['memory', 'content', 'p1', 'p2', 'im'];
   for (const key of objects) {
     if (patch[key] === undefined) continue;
     if (!patch[key] || typeof patch[key] !== 'object' || Array.isArray(patch[key])) return false;

@@ -105,7 +105,8 @@ Never commit real keys, tokens, `main-config.jsonc`, memory files, traces or Chr
 - [x] P4 content copilot + guarded automation
 - [x] P5 todos / weather / drag-ask / click sound / click balance / screenshot
 - [x] P6 music / quick launch / TTS / memory timeline
-- [ ] P7 global hotkey, dynamic island UI, Live2D/VRM, real-platform selector calibration
+- [x] Dynamic island: top status capsule with next todo, work state, music and memory count
+- [ ] P7 global hotkey, Live2D/VRM, real-platform selector calibration
 
 ## License
 

@@ -33,6 +33,7 @@ const BASE = {
       name: '主宠',
       size: 462,
       balanceEnabled: false,
+      clickBalanceEnabled: false,
       whisperEnabled: false,
       workStatusEnabled: false,
       fixedEnabled: false,
@@ -1080,4 +1081,38 @@ describe('sliceMemoryRounds —— chatMemoryRounds=0 必须真正不带历史�
   test('rounds=0 且消息列表原本为空 → 空', () => {
     assert.deepEqual(sliceMemoryRounds([], 0), []);
   });
+});
+
+test('saveUserExtras：p2 深合并、IM 密钥永不落盘', async () => {
+  const { mkdtempSync, writeFileSync, readFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { saveUserExtras } = await import('./config.ts');
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-pet-plus-extras-'));
+  const paths = { defaultFile: join(dir, 'default.jsonc'), userFile: join(dir, 'main-config.jsonc'), petDir: join(dir, 'pet') };
+  try {
+    writeFileSync(
+      paths.userFile,
+      JSON.stringify({
+        p2: { music: { enabled: true } },
+        im: { weixin: { bridge: { inboundSecret: 'keep-me' } }, qq: { accessToken: 'old' } },
+      }),
+    );
+    const ok = saveUserExtras(paths, {
+      p2: { island: { enabled: true } },
+      im: { weixin: { bridge: { outboundUrl: 'http://127.0.0.1:8787/send' } }, qq: { accessToken: 'new-secret' } },
+    });
+    assert.equal(ok, true);
+    const saved = JSON.parse(readFileSync(paths.userFile, 'utf8')) as {
+      p2?: { music?: { enabled?: boolean }; island?: { enabled?: boolean } };
+      im?: { weixin?: { bridge?: { inboundSecret?: string; outboundUrl?: string } }; qq?: { accessToken?: string } };
+    };
+    assert.equal(saved.p2?.music?.enabled, true, '未提交的 p2 字段应保留');
+    assert.equal(saved.p2?.island?.enabled, true);
+    assert.equal(saved.im?.weixin?.bridge?.outboundUrl, 'http://127.0.0.1:8787/send');
+    assert.equal(saved.im?.weixin?.bridge?.inboundSecret, 'keep-me', 'patch 不带密钥时不得清空已有值');
+    assert.notEqual(saved.im?.qq?.accessToken, 'new-secret', 'UI 提交的 accessToken 绝不能写进配置文件');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

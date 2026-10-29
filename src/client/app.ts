@@ -10,6 +10,7 @@ import { installCommandFaces, type CommandFace, type CommandUiLike } from './com
 import { installSectionNavIcon } from './nav-icon';
 import { installSuggest } from './suggest';
 import { installCompanion } from './companion';
+import { installIsland } from './island';
 import { makeExtrasSection } from './extras';
 import type * as ReactNS from 'react';
 import type * as PrimitivesNS from '@deepseek-ai/dsh-client-ui-primitives';
@@ -175,6 +176,9 @@ export function makeFactory(): (require: (mod: string) => any) => any {
 
       // 伴侣面板（Mod+Alt+J）：待办/天气/音乐/记忆/快捷/内容/朗读 + 拖拽即问 + 截图
       ctx.effect(() => installCompanion(ctx as never), 'dsh-pet-plus: companion');
+
+      // 灵动岛（默认关闭，p2.island.enabled 打开）：顶部状态胶囊
+      ctx.effect(() => installIsland(ctx as never), 'dsh-pet-plus: island');
 
       // 宠物 overlay（多开：容器渲染多个 PetCard）
       ctx.slots.inject('shell.overlay', function* () {

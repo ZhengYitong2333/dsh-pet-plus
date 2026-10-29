@@ -65,6 +65,8 @@ export function makeExtrasSection(react: {
     >([]);
     const [newMemory, setNewMemory] = useState('');
     const [logs, setLogs] = useState<Array<Record<string, unknown>>>([]);
+    const [p2, setP2] = useState({ island: false, music: true, quickLaunch: true, tts: false, ttsVoice: '', ttsRate: 180 });
+    const [quick, setQuick] = useState<Array<{ id: string; label: string; type: 'app' | 'url'; target: string }>>([]);
     const [imCfg, setImCfg] = useState({
       weixinEnabled: false,
       weixinMode: 'off',
@@ -92,6 +94,31 @@ export function makeExtrasSection(react: {
           const ilink = (wx.ilink ?? {}) as Record<string, unknown>;
           const bridge = (wx.bridge ?? {}) as Record<string, unknown>;
           const qq = (imMain.qq ?? {}) as Record<string, unknown>;
+          const p2Main = (main.p2 ?? {}) as Record<string, unknown>;
+          const island = (p2Main.island ?? {}) as Record<string, unknown>;
+          const music = (p2Main.music ?? {}) as Record<string, unknown>;
+          const quickLaunch = (p2Main.quickLaunch ?? {}) as Record<string, unknown>;
+          const tts = (p2Main.tts ?? {}) as Record<string, unknown>;
+          setP2({
+            island: island.enabled === true,
+            music: music.enabled !== false,
+            quickLaunch: quickLaunch.enabled !== false,
+            tts: tts.enabled === true,
+            ttsVoice: typeof tts.voice === 'string' ? tts.voice : '',
+            ttsRate: Number(tts.rate ?? 180),
+          });
+          setQuick(
+            Array.isArray(quickLaunch.items)
+              ? (quickLaunch.items as Array<Record<string, unknown>>)
+                  .map((it) => ({
+                    id: String(it.id ?? ''),
+                    label: String(it.label ?? it.id ?? ''),
+                    type: it.type === 'url' ? ('url' as const) : ('app' as const),
+                    target: String(it.target ?? ''),
+                  }))
+                  .filter((it) => it.id && it.target)
+              : [],
+          );
           setImCfg({
             weixinEnabled: wx.enabled === true,
             weixinMode: typeof wx.mode === 'string' ? wx.mode : 'off',
@@ -158,6 +185,12 @@ export function makeExtrasSection(react: {
             memory: { enabled: mem.enabled },
             content: { auto },
             p1: { weather: { city } },
+            p2: {
+              island: { enabled: p2.island },
+              music: { enabled: p2.music },
+              quickLaunch: { enabled: p2.quickLaunch, items: quick },
+              tts: { enabled: p2.tts, voice: p2.ttsVoice, rate: p2.ttsRate },
+            },
             im: {
               weixin: {
                 enabled: imCfg.weixinEnabled,
@@ -560,6 +593,123 @@ export function makeExtrasSection(react: {
               h('a', { href: qr.url, target: '_blank', rel: 'noreferrer' }, qr.url || qr.qrcode),
             )
           : null,
+      ),
+      h(
+        'section',
+        { style: cardStyle },
+        h('h3', { style: { fontSize: 14, margin: '0 0 6px' } }, '灵动岛 / 音乐 / 朗读 / 快捷启动'),
+        row(
+          '顶部灵动岛',
+          h('input', {
+            type: 'checkbox',
+            checked: p2.island,
+            onChange: (e: { target: { checked: boolean } }) => setP2((v) => ({ ...v, island: e.target.checked })),
+          }),
+        ),
+        row(
+          '正在播放',
+          h('input', {
+            type: 'checkbox',
+            checked: p2.music,
+            onChange: (e: { target: { checked: boolean } }) => setP2((v) => ({ ...v, music: e.target.checked })),
+          }),
+        ),
+        row(
+          '快捷启动',
+          h('input', {
+            type: 'checkbox',
+            checked: p2.quickLaunch,
+            onChange: (e: { target: { checked: boolean } }) => setP2((v) => ({ ...v, quickLaunch: e.target.checked })),
+          }),
+        ),
+        row(
+          '朗读（macOS say）',
+          h('input', {
+            type: 'checkbox',
+            checked: p2.tts,
+            onChange: (e: { target: { checked: boolean } }) => setP2((v) => ({ ...v, tts: e.target.checked })),
+          }),
+        ),
+        row(
+          '朗读音色 / 语速',
+          h(
+            'div',
+            { style: { display: 'flex', gap: 6 } },
+            h('input', {
+              type: 'text',
+              value: p2.ttsVoice,
+              placeholder: '留空 = 系统默认',
+              style: { ...inputStyle, width: 150 },
+              onChange: (e: { target: { value: string } }) => setP2((v) => ({ ...v, ttsVoice: e.target.value })),
+            }),
+            h('input', {
+              type: 'number',
+              min: 80,
+              max: 400,
+              value: p2.ttsRate,
+              style: { ...inputStyle, width: 80 },
+              onChange: (e: { target: { value: string } }) =>
+                setP2((v) => ({ ...v, ttsRate: Number(e.target.value) || 180 })),
+            }),
+          ),
+        ),
+        h('h4', { style: { fontSize: 13, margin: '12px 0 4px' } }, '快捷启动条目'),
+        ...quick.map((item, index) =>
+          h(
+            'div',
+            { key: item.id, style: { display: 'flex', gap: 6, marginBottom: 4, alignItems: 'center' } },
+            h('input', {
+              type: 'text',
+              value: item.label,
+              placeholder: '名称',
+              style: { ...inputStyle, width: 110 },
+              onChange: (e: { target: { value: string } }) =>
+                setQuick((list) => list.map((x, i) => (i === index ? { ...x, label: e.target.value } : x))),
+            }),
+            h(
+              'select',
+              {
+                value: item.type,
+                style: { ...inputStyle, width: 80 },
+                onChange: (e: { target: { value: string } }) =>
+                  setQuick((list) =>
+                    list.map((x, i) => (i === index ? { ...x, type: e.target.value === 'url' ? 'url' : 'app' } : x)),
+                  ),
+              },
+              h('option', { value: 'app' }, 'App'),
+              h('option', { value: 'url' }, '网址'),
+            ),
+            h('input', {
+              type: 'text',
+              value: item.target,
+              placeholder: 'App 名或 https://...',
+              style: { ...inputStyle, flex: 1 },
+              onChange: (e: { target: { value: string } }) =>
+                setQuick((list) => list.map((x, i) => (i === index ? { ...x, target: e.target.value } : x))),
+            }),
+            h(
+              'button',
+              {
+                style: { ...btnStyle, padding: '2px 8px' },
+                onClick: () => setQuick((list) => list.filter((_, i) => i !== index)),
+              },
+              '删',
+            ),
+          ),
+        ),
+        h(
+          'button',
+          {
+            style: { ...btnStyle, marginTop: 4 },
+            onClick: () =>
+              setQuick((list) => [
+                ...list,
+                { id: 'q' + Date.now().toString(36), label: '', type: 'app', target: '' },
+              ]),
+          },
+          '+ 加一条',
+        ),
+        h('button', { style: { ...btnStyle, marginLeft: 8, marginTop: 4 }, onClick: () => void saveExtras(), disabled: busy }, '保存'),
       ),
       h(
         'section',
