@@ -64,6 +64,8 @@ export function makeExtrasSection(react: {
       Array<{ id: string; text: string; layer: string; importance: number; archived: boolean; rev: number }>
     >([]);
     const [newMemory, setNewMemory] = useState('');
+    const [preview, setPreview] = useState('');
+    const [budget, setBudget] = useState({ calls: 0, tokens: 0, maxCalls: 0, maxTokens: 0 });
     const [logs, setLogs] = useState<Array<Record<string, unknown>>>([]);
     const [p2, setP2] = useState({ island: false, music: true, quickLaunch: true, tts: false, ttsVoice: '', ttsRate: 180 });
     const [quick, setQuick] = useState<Array<{ id: string; label: string; type: 'app' | 'url'; target: string }>>([]);
@@ -166,6 +168,15 @@ export function makeExtrasSection(react: {
             chars: Number((stats as { instructions?: { chars?: number } }).instructions?.chars ?? 0),
             version: Number((stats as { instructions?: { version?: number } }).instructions?.version ?? 0),
           });
+          const budgetSnap = (stats as { budget?: { calls?: Record<string, number>; tokens?: Record<string, number>; limits?: { calls?: number; tokens?: number } } }).budget;
+          if (budgetSnap) {
+            setBudget({
+              calls: Object.values(budgetSnap.calls ?? {}).reduce((a, b) => a + Number(b || 0), 0),
+              tokens: Object.values(budgetSnap.tokens ?? {}).reduce((a, b) => a + Number(b || 0), 0),
+              maxCalls: Number(budgetSnap.limits?.calls ?? 0),
+              maxTokens: Number(budgetSnap.limits?.tokens ?? 0),
+            });
+          }
           setInstructions(typeof (inst as { text?: string }).text === 'string' ? (inst as { text: string }).text : '');
           setContentStatus(cstatus as Record<string, unknown>);
           setIm(is as Record<string, unknown>);
@@ -338,6 +349,11 @@ export function makeExtrasSection(react: {
           }),
         ),
         h('p', { style: { fontSize: 12, opacity: 0.7, margin: '4px 0' } }, `当前指令 ${mem.chars} 字 / v${mem.version}`),
+        h(
+          'p',
+          { style: { fontSize: 12, opacity: 0.7, margin: '4px 0' } },
+          `今日记忆调用 ${budget.calls}/${budget.maxCalls || '—'} 次 · ${(budget.tokens / 1000).toFixed(1)}k/${((budget.maxTokens || 0) / 1000).toFixed(0)}k tokens`,
+        ),
         h('textarea', {
           value: instructions,
           rows: 4,
@@ -350,7 +366,47 @@ export function makeExtrasSection(react: {
           { style: { display: 'flex', gap: 8, marginTop: 8 } },
           h('button', { style: btnStyle, onClick: () => void saveInstructions(), disabled: busy }, '保存记忆指令'),
           h('button', { style: btnStyle, onClick: () => void saveExtras(), disabled: busy }, '保存开关'),
+          h(
+            'button',
+            {
+              style: btnStyle,
+              onClick: async () => {
+                const res = (await fetch('/dsh-pet-plus/memory/preview').then((r) => r.json())) as { text?: string };
+                setPreview(String(res.text ?? '（本轮没有注入任何记忆）'));
+              },
+            },
+            '预览注入',
+          ),
+          h(
+            'button',
+            {
+              style: btnStyle,
+              onClick: async () => {
+                if (!window.confirm('清空全部长期画像？条目会归档并写墓碑，之后不会自动复活。')) return;
+                await fetch('/dsh-pet-plus/memory/clear', { method: 'POST' });
+                setProfile([]);
+                setMsg('已清空长期画像');
+              },
+            },
+            '清空画像',
+          ),
         ),
+        preview
+          ? h('pre', {
+              style: {
+                fontSize: 11,
+                lineHeight: 1.5,
+                whiteSpace: 'pre-wrap' as const,
+                wordBreak: 'break-word' as const,
+                background: 'rgba(15,23,42,.85)',
+                border: '1px solid rgba(148,163,184,.2)',
+                borderRadius: 8,
+                padding: 8,
+                maxHeight: 200,
+                overflow: 'auto',
+              },
+            }, preview)
+          : null,
         h('h4', { style: { fontSize: 13, margin: '14px 0 6px' } }, `长期画像（${profile.filter((e) => !e.archived).length} 条生效）`),
         h(
           'div',

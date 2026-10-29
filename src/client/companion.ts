@@ -548,19 +548,50 @@ async function renderMemory(body: HTMLDivElement, fail: Fail): Promise<void> {
   });
   if (!res) return;
   const items = res.items ?? [];
-  if (items.length === 0) {
-    body.innerHTML = '<div class="dpp-dim">还没有记忆。多聊几句，我会自己记下来。</div>';
-    return;
-  }
-  body.innerHTML = items
-    .slice(0, 60)
-    .map(
-      (item) =>
-        `<div class="dpp-row"><span>${item.type === 'episode' ? '·' : '★'}</span><div class="dpp-grow">${esc(
-          item.text,
-        )}<div class="dpp-dim">${nowHHMM(item.ts)}${item.status === 'archived' || item.status === 'forgotten' ? ' · 已淡出' : ''}</div></div></div>`,
-    )
-    .join('');
+  body.innerHTML =
+    '<div class="dpp-add"><input type="text" id="dpp-mem-q" placeholder="搜索历史会话（L0）" />' +
+    '<button class="dpp-primary" type="button" id="dpp-mem-go">搜索</button></div>' +
+    '<div id="dpp-mem-hits"></div>' +
+    (items.length === 0
+      ? '<div class="dpp-dim">还没有记忆。多聊几句，我会自己记下来。</div>'
+      : items
+          .slice(0, 60)
+          .map(
+            (item) =>
+              `<div class="dpp-row"><span>${item.type === 'episode' ? '·' : '★'}</span><div class="dpp-grow">${esc(
+                item.text,
+              )}<div class="dpp-dim">${nowHHMM(item.ts)}${item.status === 'archived' || item.status === 'forgotten' ? ' · 已淡出' : ''}</div></div></div>`,
+          )
+          .join(''));
+  const q = body.querySelector<HTMLInputElement>('#dpp-mem-q');
+  const hits = body.querySelector<HTMLDivElement>('#dpp-mem-hits');
+  const search = async (): Promise<void> => {
+    if (!hits) return;
+    const value = q?.value.trim() ?? '';
+    if (!value) return;
+    hits.innerHTML = '<div class="dpp-dim">回忆中…</div>';
+    try {
+      const r = await api<{ ok?: boolean; hits?: Array<{ sessionId: string; time: number; snippet: string }>; message?: string }>(
+        '/memory/sessions?q=' + encodeURIComponent(value) + '&limit=5',
+      );
+      if (!r.ok) throw new Error(r.message ?? '会话检索不可用');
+      const list = r.hits ?? [];
+      hits.innerHTML = list.length
+        ? list
+            .map(
+              (hit) =>
+                `<div class="dpp-card"><b>${nowHHMM(hit.time)}</b><div>${esc(hit.snippet)}</div><div class="dpp-dim">${esc(hit.sessionId)}</div></div>`,
+            )
+            .join('')
+        : '<div class="dpp-dim">没有找到相关会话。</div>';
+    } catch (error) {
+      hits.innerHTML = `<div class="dpp-err">${esc(error instanceof Error ? error.message : String(error))}</div>`;
+    }
+  };
+  body.querySelector('#dpp-mem-go')?.addEventListener('click', () => void search());
+  q?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') void search();
+  });
 }
 
 async function renderQuick(body: HTMLDivElement, fail: Fail): Promise<void> {

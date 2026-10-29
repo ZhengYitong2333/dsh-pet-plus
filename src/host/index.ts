@@ -2694,6 +2694,17 @@ export function apply(ctx: any): void {
       const cfg = readAllConfig(configPaths);
       return { kind: 'json', status: 200, obj: { ok: true, ...memoryService.stats(cfg.main ?? {}) } };
     }
+    // 注入预览：设置页用它展示“这一轮到底塞了什么”，只读、不调用模型。
+    if (rest === 'memory/preview') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const cfg = readAllConfig(configPaths);
+      const text = memoryService.render(cfg.main ?? {});
+      return {
+        kind: 'json',
+        status: 200,
+        obj: { ok: true, text, chars: Array.from(text).length, stats: memoryService.stats(cfg.main ?? {}) },
+      };
+    }
 
 
   // 对话：/dsh-pet-plus/chat?pet=<id>
