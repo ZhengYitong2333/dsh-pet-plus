@@ -113,6 +113,9 @@ import { generateSuggestions, SuggestCache } from './suggest';
 import { readJsonFile, writeJsonAtomic } from './memory/store';
 import { ImService, imConfigOf } from './im/index';
 import { ContentService, contentConfOf } from './content/service';
+import { TodoStore } from './todo';
+import { getWeather, festivalOf } from './weather';
+import { assistText, type AssistKind } from './assist';
 import { configuredModel } from './model-selection';
 import { limitPool, pickMeme, readMemePool } from './memes';
 import {
@@ -993,6 +996,7 @@ export function apply(ctx: any): void {
 
   // IM：微信 iLink / 通用桥 / QQ OneBot。入站 → 桌宠对话管线；回复走原通道。
   const imAccountFile = join(userRoot, 'im', 'ilink-account.json');
+  const todoStore = new TodoStore(join(userRoot, 'todo.json'));
   const contentService = new ContentService({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH ctx 无静态类型
     ctx: ctx as any,
@@ -2161,6 +2165,70 @@ export function apply(ctx: any): void {
         }
         signal?.addEventListener('abort', onAbort, { once: true });
       });
+    }
+
+    // P1 陪伴：待办 / 天气 / 节日 / 拖拽即问
+    if (rest === 'todo') {
+      if (method === 'GET') return { kind: 'json', status: 200, obj: { ok: true, tasks: todoStore.list() } };
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let req: Record<string, unknown> = {};
+      try {
+        req = (JSON.parse(body ?? '{}') as Record<string, unknown>) ?? {};
+      } catch {
+        return { kind: 'json', status: 400, obj: { ok: false, message: 'invalid json' } };
+      }
+      const item = await todoStore.add(String(req.text ?? ''), Number(req.dueAt));
+      return { kind: 'json', status: item ? 200 : 400, obj: item ? { ok: true, item } : { ok: false, message: '文本为空' } };
+    }
+    if (rest.startsWith('todo/')) {
+      const id = decodeURIComponent(rest.slice('todo/'.length));
+      if (method === 'DELETE') {
+        const ok = await todoStore.remove(id);
+        return { kind: 'json', status: ok ? 200 : 404, obj: { ok } };
+      }
+      if (method !== 'PATCH') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let patch: Record<string, unknown> = {};
+      try {
+        patch = (JSON.parse(body ?? '{}') as Record<string, unknown>) ?? {};
+      } catch {
+        return { kind: 'json', status: 400, obj: { ok: false, message: 'invalid json' } };
+      }
+      const item = await todoStore.update(id, {
+        text: typeof patch.text === 'string' ? patch.text : undefined,
+        done: typeof patch.done === 'boolean' ? patch.done : undefined,
+        dueAt: patch.dueAt === undefined ? undefined : Number(patch.dueAt),
+      });
+      return { kind: 'json', status: item ? 200 : 404, obj: item ? { ok: true, item } : { ok: false } };
+    }
+    if (rest === 'weather') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const main = readAllConfig(configPaths).main ?? {};
+      const p1 = (main.p1 ?? {}) as Record<string, unknown>;
+      const w = (p1.weather ?? {}) as Record<string, unknown>;
+      const city = typeof w.city === 'string' ? w.city : '';
+      const result = await getWeather(city);
+      return { kind: 'json', status: 200, obj: result };
+    }
+    if (rest === 'festival') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      return { kind: 'json', status: 200, obj: { ok: true, ...festivalOf() } };
+    }
+    if (rest === 'assist') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let req: Record<string, unknown> = {};
+      try {
+        req = (JSON.parse(body ?? '{}') as Record<string, unknown>) ?? {};
+      } catch {
+        return { kind: 'json', status: 400, obj: { ok: false, message: 'invalid json' } };
+      }
+      const kind = req.kind;
+      const allowed: AssistKind[] = ['summary', 'translate', 'explain', 'comment'];
+      const assistKind: AssistKind = allowed.includes(kind as AssistKind) ? (kind as AssistKind) : 'summary';
+      const result = await assistText(ctx as never, {
+        text: String(req.text ?? ''),
+        kind: assistKind,
+      });
+      return { kind: 'json', status: 200, obj: result };
     }
 
     // 内容副驾：POST /content/digest {link?, text?}；GET /content/status
