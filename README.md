@@ -164,7 +164,7 @@ node scripts/install-local.mjs --profile web
 - 记忆与画像：同目录 `memory.json` / `profile.json` / `episodes.jsonl`
 - 密钥：全部走 DSH credentials（微信 token、QQ access token 等），**不要写进配置文件**
 
-详细步骤见 [微信 / QQ 接入](docs/setup-im.md) 与 [内容自动化与安全阀](docs/setup-content.md)。
+详细步骤见 [安装与加载](docs/install.md)、[微信 / QQ 接入](docs/setup-im.md) 与 [内容自动化与安全阀](docs/setup-content.md)；发布流程见 [发布与插件市场清单](docs/publishing.md)。
 
 ---
 
