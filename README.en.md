@@ -90,7 +90,7 @@ See [WeChat & QQ setup](docs/setup-im.md) and [content automation](docs/setup-co
 ```bash
 pnpm typecheck
 pnpm build
-pnpm test:core
+pnpm test
 pnpm check:secrets
 ```
 

@@ -192,11 +192,7 @@ export const name = 'pet';
 export const inject = ['webServer', 'agentDefaultModel', 'credentials', 'llm', 'commands', 'connection'];
 
 /** 本包目录：宿主构建产物位于 lib/，其上一级即包根。 */
-// lib/index.js → 包根；直接跑 src/host/index.ts（测试/开发）→ 需要再上一级才是包根
-const PACKAGE_ROOT = (() => {
-  const here = resolve(fileURLToPath(new URL('..', import.meta.url)));
-  return existsSync(join(here, 'assets')) ? here : resolve(here, '..');
-})();
+const PACKAGE_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 /** 包内 assets 根 */
 const PACKAGE_ROOT_ASSETS = join(PACKAGE_ROOT, 'assets');

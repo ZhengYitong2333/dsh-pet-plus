@@ -61,12 +61,13 @@
   "scripts": {
     "build": "rm -rf lib && tsdown && node scripts/postbuild.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test \"src/**/*.test.ts\"",
+    "test": "node --experimental-strip-types --import ./scripts/test-register.mjs --test --test-timeout=20000 --test-concurrency=4 \"src/host/**/*.test.ts\" \"src/client/**/*.test.ts\" \"src/shared/**/*.test.ts\"",
     "test:core": "node --experimental-strip-types --import ./scripts/test-register.mjs --test src/host/memory/*.test.ts src/host/content/*.test.ts src/host/im/*.test.ts src/host/suggest.test.ts src/host/todo.test.ts src/host/companion.test.ts src/host/quicklaunch.test.ts src/host/config.test.ts src/client/*.test.ts src/shared/*.test.ts",
     "check:secrets": "node scripts/check-secrets.mjs",
     "prepare:types": "node scripts/link-dsh-types.mjs",
     "gen:gifs": "node scripts/gen-gifs.mjs",
-    "prepack": "npm run build && npm run check:secrets"
+    "prepack": "npm run build && node scripts/prepack-check.js && npm run check:secrets",
+    "start:desktop": "node scripts/start-desktop.mjs"
   },
   "license": "MIT",
   "engines": {

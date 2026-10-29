@@ -20,5 +20,6 @@ jobs:
       - run: pnpm install
       - run: pnpm typecheck
       - run: pnpm build
-      - run: pnpm test:core
+      - run: pnpm test
+      - run: node scripts/prepack-check.js
       - run: pnpm check:secrets
