@@ -112,6 +112,7 @@ import { InputHistoryStore } from './memory/input-history';
 import { generateSuggestions, SuggestCache } from './suggest';
 import { readJsonFile, writeJsonAtomic } from './memory/store';
 import { ImService, imConfigOf } from './im/index';
+import { ContentService, contentConfOf } from './content/service';
 import { configuredModel } from './model-selection';
 import { limitPool, pickMeme, readMemePool } from './memes';
 import {
@@ -992,6 +993,13 @@ export function apply(ctx: any): void {
 
   // IM：微信 iLink / 通用桥 / QQ OneBot。入站 → 桌宠对话管线；回复走原通道。
   const imAccountFile = join(userRoot, 'im', 'ilink-account.json');
+  const contentService = new ContentService({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH ctx 无静态类型
+    ctx: ctx as any,
+    getConf: () => contentConfOf(readAllConfig(configPaths).main ?? {}),
+    userRoot,
+  });
+
   const imService = new ImService({
     userRoot,
     getConfig: () => imConfigOf(readAllConfig(configPaths).main ?? {}),
@@ -2153,6 +2161,51 @@ export function apply(ctx: any): void {
         }
         signal?.addEventListener('abort', onAbort, { once: true });
       });
+    }
+
+    // 内容副驾：POST /content/digest {link?, text?}；GET /content/status
+    if (rest === 'content/digest') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let req: Record<string, unknown> = {};
+      try {
+        req = (JSON.parse(body ?? '{}') as Record<string, unknown>) ?? {};
+      } catch {
+        return { kind: 'json', status: 400, obj: { ok: false, reason: 'bad-request', message: '请求体不是合法 JSON' } };
+      }
+      const result = await contentService.digest({
+        link: typeof req.link === 'string' ? req.link : undefined,
+        text: typeof req.text === 'string' ? req.text : undefined,
+      });
+      return {
+        kind: 'json',
+        status: 200,
+        obj: result.ok
+          ? { ok: true, result: result.result, cached: result.cached }
+          : { ok: false, reason: result.reason, message: result.message },
+      };
+    }
+    if (rest === 'content/auto/start') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const result = await contentService.automation.start();
+      return { kind: 'json', status: result.ok ? 200 : 200, obj: result };
+    }
+    if (rest === 'content/auto/stop') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      contentService.automation.stop();
+      return { kind: 'json', status: 200, obj: { ok: true } };
+    }
+    if (rest === 'content/auto/status') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      return { kind: 'json', status: 200, obj: { ok: true, status: contentService.automation.status(), config: contentService.status().config.auto } };
+    }
+    if (rest === 'content/auto/logs') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      return { kind: 'json', status: 200, obj: { ok: true, logs: contentService.automation.status().logs } };
+    }
+
+    if (rest === 'content/status') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      return { kind: 'json', status: 200, obj: { ok: true, ...contentService.status() } };
     }
 
     // IM：状态 / iLink 扫码与启停 / QQ 与桥入站 / 主动发送
