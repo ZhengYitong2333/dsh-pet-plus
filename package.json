@@ -56,7 +56,8 @@
     "NOTICE.md",
     "README.md",
     "README.en.md",
-    "docs"
+    "docs",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "rm -rf lib && tsdown && node scripts/postbuild.mjs",
