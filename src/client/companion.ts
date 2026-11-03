@@ -175,6 +175,7 @@ export function installCompanion(ctx: Context): () => void {
   ensureStyle();
   const root = document.createElement('div');
   root.id = ROOT_ID;
+  root.dataset.build = '0.1.1';
   root.innerHTML =
     '<button class="dpp-btn" type="button" title="伴侣面板（Mod+Alt+J）">✦</button>' +
     '<button class="dpp-btn dpp-cam" type="button" title="截图并复制，粘贴到对话里让我看" style="margin-right:6px;font-size:16px">📷</button>' +
