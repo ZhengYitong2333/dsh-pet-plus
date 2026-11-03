@@ -29,7 +29,7 @@
 | Missing | What this plugin does |
 |---|---|
 | Memory | L3 instructions / L2 profile / L1 episodes / L0 session traces, injected under a strict token budget |
-| Initiative | `Mod+Alt+K` generates three input suggestions from your profile and recent prompts, and fills the DSH composer |
+| Initiative | `Mod+Alt+U` generates three input suggestions from your profile and recent prompts, and fills the DSH composer |
 | Reach | WeChat ClawBot (iLink), generic WeChat bridge, QQ OneBot v11 |
 | Presence | Companion panel: todos with countdown, weather, now playing, memory timeline, quick launch, TTS, screenshot explain |
 
@@ -46,7 +46,7 @@ Injection is capped at 1,500 chars per turn by default; if memory is off or empt
 
 ### Three suggestions
 
-`Mod+Alt+K` → three candidates based on your profile, recent inputs and time of day. Click one to put it into the DSH input box. Accepted/discarded suggestions become weak profile signals.
+`Mod+Alt+U` → three candidates based on your profile, recent inputs and time of day. Click one to put it into the DSH input box. Accepted/discarded suggestions become weak profile signals.
 
 Desktop mode also registers a true global hotkey `⌘/Ctrl+Alt+Shift+K` (override with `DSH_PET_GLOBAL_SHORTCUT`): it works without focusing DSH, opens a small suggestion window, and clicking a candidate copies it to the clipboard.
 

@@ -37,28 +37,28 @@ const TABS: Array<{ id: Tab; label: string }> = [
 
 function css(): string {
   return `
-#${ROOT_ID}{position:fixed;right:18px;bottom:96px;z-index:2147483002;
+#${ROOT_ID}{position:fixed;right:18px;bottom:96px;z-index:2147483002;pointer-events:auto;
   font-family:var(--dsh-pet-font-family,'PingFang SC','Microsoft YaHei',sans-serif);color:#e2e8f0;font-size:13px}
 #${ROOT_ID} .dpp-btn{width:44px;height:44px;border-radius:50%;border:1px solid rgba(129,140,248,.35);
   background:rgba(24,28,38,.92);color:#c7d2fe;font-size:20px;cursor:pointer;box-shadow:0 8px 28px rgba(0,0,0,.35);
   backdrop-filter:blur(10px);transition:transform .15s ease,background .15s ease}
 #${ROOT_ID} .dpp-btn:hover{transform:translateY(-2px);background:rgba(49,46,129,.92)}
-#${ROOT_ID} .dpp-panel{position:absolute;right:0;bottom:54px;width:min(380px,86vw);max-height:min(560px,72vh);
+#${ROOT_ID} .dpp-panel{position:absolute;right:0;bottom:54px;width:min(380px,86vw);max-height:min(560px,72vh);pointer-events:auto;
   display:flex;flex-direction:column;background:rgba(20,24,34,.97);border:1px solid rgba(129,140,248,.28);
   border-radius:16px;box-shadow:0 18px 60px rgba(0,0,0,.5);backdrop-filter:blur(16px);overflow:hidden}
-#${ROOT_ID} .dpp-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px 6px}
+#${ROOT_ID} .dpp-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px 6px;cursor:move;user-select:none}
 #${ROOT_ID} .dpp-title{font-size:12px;letter-spacing:.4px;color:#a5b4fc}
 #${ROOT_ID} .dpp-x{cursor:pointer;color:#94a3b8;padding:2px 6px;border-radius:6px}
 #${ROOT_ID} .dpp-x:hover{background:rgba(148,163,184,.15);color:#fff}
-#${ROOT_ID} .dpp-tabs{display:flex;gap:4px;padding:0 8px 8px;flex-wrap:wrap}
-#${ROOT_ID} .dpp-tab{padding:4px 9px;border-radius:999px;border:1px solid transparent;background:transparent;
-  color:#94a3b8;cursor:pointer;font-size:12px}
+#${ROOT_ID} .dpp-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:0 8px 8px}
+#${ROOT_ID} .dpp-tab{padding:5px 6px;border-radius:8px;border:1px solid transparent;background:transparent;
+  color:#94a3b8;cursor:pointer;font-size:11px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #${ROOT_ID} .dpp-tab:hover{color:#e2e8f0;background:rgba(148,163,184,.12)}
 #${ROOT_ID} .dpp-tab.on{color:#fff;background:rgba(79,70,229,.35);border-color:rgba(129,140,248,.5)}
 #${ROOT_ID} .dpp-body{padding:4px 12px 12px;overflow:auto;flex:1;min-height:120px}
 #${ROOT_ID} .dpp-row{display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid rgba(148,163,184,.12)}
 #${ROOT_ID} .dpp-row:last-child{border-bottom:0}
-#${ROOT_ID} .dpp-grow{flex:1;min-width:0;word-break:break-word;line-height:1.45}
+#${ROOT_ID} .dpp-grow{flex:1;min-width:0;word-break:break-word;line-height:1.45;cursor:text}
 #${ROOT_ID} .dpp-dim{color:#94a3b8;font-size:12px}
 #${ROOT_ID} .dpp-due{color:#fbbf24;font-size:11px;margin-left:4px}
 #${ROOT_ID} .dpp-over{color:#f87171;font-size:11px;margin-left:4px}
@@ -187,8 +187,64 @@ export function installCompanion(ctx: Context): () => void {
   const panel = root.querySelector<HTMLDivElement>('.dpp-panel');
   const body = root.querySelector<HTMLDivElement>('.dpp-body');
   const button = root.querySelector<HTMLButtonElement>('.dpp-btn');
+  const head = root.querySelector<HTMLDivElement>('.dpp-head');
   let current: Tab | undefined;
   let timer: number | undefined;
+
+  // 面板可拖动：位置存 localStorage；双击标题栏回到默认位置。
+  const POS_KEY = 'dsh-pet-plus:panel-pos';
+  const applyPos = (left: number, top: number): void => {
+    if (!panel) return;
+    const w = panel.getBoundingClientRect().width;
+    const h = panel.getBoundingClientRect().height;
+    panel.style.position = 'fixed';
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    panel.style.left = Math.max(4, Math.min(left, window.innerWidth - w - 4)) + 'px';
+    panel.style.top = Math.max(4, Math.min(top, window.innerHeight - h - 4)) + 'px';
+  };
+  let savedPos: { left: number; top: number } | undefined;
+  try {
+    const saved = JSON.parse(localStorage.getItem(POS_KEY) ?? 'null') as { left?: number; top?: number } | null;
+    if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+      savedPos = { left: saved.left as number, top: saved.top as number };
+    }
+  } catch {
+    /* 位置坏了就用默认 */
+  }
+  head?.addEventListener('dblclick', (event) => {
+    if ((event.target as HTMLElement).closest('.dpp-x')) return;
+    if (!panel) return;
+    panel.style.position = '';
+    panel.style.right = '';
+    panel.style.bottom = '';
+    panel.style.left = '';
+    panel.style.top = '';
+    localStorage.removeItem(POS_KEY);
+  });
+  head?.addEventListener('mousedown', (event) => {
+    if (event.button !== 0 || (event.target as HTMLElement).closest('.dpp-x')) return;
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const move = (e: MouseEvent): void => {
+      applyPos(rect.left + e.clientX - startX, rect.top + e.clientY - startY);
+    };
+    const up = (): void => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      const final = panel.getBoundingClientRect();
+      try {
+        localStorage.setItem(POS_KEY, JSON.stringify({ left: final.left, top: final.top }));
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+    event.preventDefault();
+  });
 
   const stopTimer = (): void => {
     if (timer !== undefined) window.clearInterval(timer);
@@ -323,8 +379,14 @@ export function installCompanion(ctx: Context): () => void {
   const toggle = (tab: Tab = current ?? 'todo'): void => {
     if (!panel) return;
     panel.hidden = !panel.hidden;
-    if (!panel.hidden) setTab(tab);
-    else stopTimer();
+    if (!panel.hidden) {
+      if (savedPos) {
+        // 面板隐藏时 rect 是 0，不能在那时夹取位置；显示后补一次。
+        applyPos(savedPos.left, savedPos.top);
+        savedPos = undefined;
+      }
+      setTab(tab);
+    } else stopTimer();
   };
 
   button?.addEventListener('click', () => toggle());
@@ -355,9 +417,19 @@ export function installCompanion(ctx: Context): () => void {
   window.addEventListener('dsh-pet-plus:open-companion', onOpenCompanion);
 
   // ---- 截图：抓一帧并复制到剪贴板；解释由 DSH 对话里的多模态模型完成 ----
-  async function captureScreenshot(): Promise<void> {
+  /** 桌面宿主优先走主进程 desktopCapturer；失败/浏览器再回落到 getDisplayMedia。 */
+  async function captureBlob(): Promise<{ blob: Blob; via: 'host' | 'display' }> {
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      const res = await api<{ ok?: boolean; dataUrl?: string; message?: string }>('/capture', { method: 'POST' });
+      if (res.ok && res.dataUrl) {
+        const blob = await (await fetch(res.dataUrl)).blob();
+        if (blob.size > 0) return { blob, via: 'host' };
+      }
+    } catch {
+      /* 回落 */
+    }
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    try {
       const track = stream.getVideoTracks()[0];
       const video = document.createElement('video');
       video.srcObject = stream;
@@ -367,10 +439,17 @@ export function installCompanion(ctx: Context): () => void {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
-      track.stop();
-      stream.getTracks().forEach((t) => t.stop());
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
       if (!blob) throw new Error('截图编码失败');
+      return { blob, via: 'display' };
+    } finally {
+      stream.getTracks().forEach((t) => t.stop());
+    }
+  }
+
+  async function captureScreenshot(): Promise<void> {
+    try {
+      const { blob } = await captureBlob();
       // 先复制，保证失败时还有退路
       if (navigator.clipboard && 'write' in navigator.clipboard && typeof ClipboardItem !== 'undefined') {
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
@@ -382,7 +461,12 @@ export function installCompanion(ctx: Context): () => void {
       }
       toast('截图已复制。在对话输入框粘贴并回车，我就能看图解释。');
     } catch (error) {
-      toast('截图失败：' + (error instanceof Error ? error.message : String(error)), 'err');
+      const name = error instanceof Error ? error.name : '';
+      const message =
+        name === 'NotAllowedError' || name === 'PermissionDeniedError'
+          ? '系统未允许屏幕录制。macOS：系统设置 → 隐私与安全性 → 屏幕录制，勾选 DeepSeek Harness 后重启；浏览器：允许共享屏幕。'
+          : '截图失败：' + (error instanceof Error ? error.message : String(error));
+      toast(message, 'err');
     }
   }
 
@@ -490,7 +574,6 @@ export function installCompanion(ctx: Context): () => void {
       defaults: {
         'web:macos': binding,
         'web:windows': binding,
-        'web:linux': binding,
         'desktop:macos': binding,
         'desktop:windows': binding,
         'desktop:linux': binding,
@@ -553,6 +636,43 @@ async function renderTodo(body: HTMLDivElement, fail: Fail): Promise<void> {
       text.innerHTML =
         esc(task.text) +
         (due ? `<span class="${due.overdue ? 'dpp-over' : 'dpp-due'}">${esc(due.text)}</span>` : '');
+      text.title = '双击编辑';
+      const startEdit = (): void => {
+        if (text.querySelector('input')) return;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = task.text;
+        input.style.width = '100%';
+        let finished = false;
+        const commit = (save: boolean): void => {
+          if (finished) return;
+          finished = true;
+          const value = input.value.trim();
+          if (!save || !value || value === task.text) {
+            void renderTodo(body, fail);
+            return;
+          }
+          void api(`/todo/${encodeURIComponent(task.id)}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ text: value }),
+          }).then(() => void renderTodo(body, fail));
+        };
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') commit(true);
+          if (e.key === 'Escape') commit(false);
+        });
+        input.addEventListener('blur', () => commit(true));
+        text.replaceWith(input);
+        input.focus();
+        input.select();
+      };
+      text.addEventListener('dblclick', startEdit);
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'dpp-mini';
+      edit.title = '编辑';
+      edit.textContent = '✎';
+      edit.addEventListener('click', startEdit);
       const del = document.createElement('button');
       del.type = 'button';
       del.className = 'dpp-mini';
@@ -561,7 +681,7 @@ async function renderTodo(body: HTMLDivElement, fail: Fail): Promise<void> {
       del.addEventListener('click', () => {
         void api(`/todo/${encodeURIComponent(task.id)}`, { method: 'DELETE' }).then(() => void renderTodo(body, fail));
       });
-      row.append(check, text, del);
+      row.append(check, text, edit, del);
       body.appendChild(row);
     }
   };

@@ -2199,6 +2199,53 @@ export function apply(ctx: any): void {
       return { kind: 'json', status: ok ? 200 : 400, obj: { ok } };
     }
 
+
+    // 截图：桌面宿主用 Electron desktopCapturer（主屏），避免浏览器 getDisplayMedia 在
+    // DSH 窗口里被权限策略直接拒掉；dsh web 下返回 ok:false，由前端回落到 getDisplayMedia。
+    if (rest === 'capture') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      if (!process.versions.electron) {
+        return { kind: 'json', status: 200, obj: { ok: false, reason: 'not-desktop', message: '当前不是桌面宿主' } };
+      }
+      try {
+        const { createRequire } = await import('node:module');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Electron 主进程模块没有可解析的类型
+        const electron = createRequire(import.meta.url)('electron') as any;
+        const dc = electron.desktopCapturer;
+        const screenApi = electron.screen;
+        if (!dc || !screenApi) throw new Error('desktopCapturer 不可用');
+        const display = screenApi.getPrimaryDisplay();
+        const scale = Number(display.scaleFactor) || 1;
+        const sources = await dc.getSources({
+          types: ['screen'],
+          thumbnailSize: {
+            width: Math.round(display.size.width * scale),
+            height: Math.round(display.size.height * scale),
+          },
+        });
+        const source =
+          sources.find((item: { display_id?: string }) => String(item.display_id) === String(display.id)) ?? sources[0];
+        if (!source) throw new Error('没有可用的屏幕源');
+        const image = source.thumbnail;
+        const size = image.getSize();
+        return {
+          kind: 'json',
+          status: 200,
+          obj: { ok: true, dataUrl: image.toDataURL(), width: size.width, height: size.height },
+        };
+      } catch (error) {
+        return {
+          kind: 'json',
+          status: 200,
+          obj: {
+            ok: false,
+            reason: 'capture-failed',
+            message: '截图失败：' + (error instanceof Error ? error.message : String(error)),
+          },
+        };
+      }
+    }
+
     // P2 陪伴：音乐 / TTS / 快捷启动 / 记忆时间线
     if (rest === 'music/now') {
       if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };

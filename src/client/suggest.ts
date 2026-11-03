@@ -1,6 +1,6 @@
 /**
  * 快捷键三候选（浏览器半侧）：
- *  - 注册官方 shortcuts 命令（默认 Mod+Alt+K）；
+ *  - 注册官方 shortcuts 命令（默认 Mod+Alt+U）；
  *  - 会话探针：挂在 conversation.input.overlay 上，捕获当前会话 scoped ctx；
  *  - 弹层：3 个候选 chip，点击填入当前会话草稿（拿不到会话则复制到剪贴板）。
  */
@@ -185,7 +185,7 @@ export function installSuggest(ctx: Context): () => void {
       console.warn('[dsh-pet-plus] shortcuts 服务不可用，快捷键三候选未注册');
       return () => {};
     }
-    const binding = { code: 'KeyK', modifiers: ['primary', 'alt'] };
+    const binding = { code: 'KeyU', modifiers: ['primary', 'alt'] };
     return shortcuts.register({
       id: 'dsh-pet-plus.suggest',
       label: () => '大肥鱼：三条建议',
@@ -193,7 +193,6 @@ export function installSuggest(ctx: Context): () => void {
       defaults: {
         'web:macos': binding,
         'web:windows': binding,
-        'web:linux': binding,
         'desktop:macos': binding,
         'desktop:windows': binding,
         'desktop:linux': binding,

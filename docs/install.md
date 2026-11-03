@@ -15,7 +15,7 @@ node scripts/install-local.mjs --profile web
 脚本会：
 
 1. `dsh plugin --profile <profile> add link:<repo>` 把当前仓库链进 profile；
-2. 把 `dsh-pet-plus` 追加到 `~/.dsh/profiles/<profile>/package.json` 的 `dsh.profile.bundles`；
+2. 把 `dsh-pet-plus` 追加到 `~/.dsh/profiles/<profile>/package.json` 的 `dsh.profile.bundles`；若原版 `dsh-pet` 已在列表中，则移除它，避免重复注册服务；
 3. 打印重启与验证命令。
 
 **重启 DSH**（profile 包列表只在启动时读取），然后刷新 Web 页面。

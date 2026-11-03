@@ -171,7 +171,7 @@ export function makeFactory(): (require: (mod: string) => any) => any {
         return installSectionNavIcon({ label: () => t('nav'), renderSvg: () => renderIcon(icon) });
       }, 'dsh-pet: settings nav icon');
 
-      // 快捷键三候选（Mod+Alt+K）：会话探针 + 弹层 + 填入输入框
+      // 快捷键三候选（Mod+Alt+U）：会话探针 + 弹层 + 填入输入框
       ctx.effect(() => installSuggest(ctx as never), 'dsh-pet-plus: suggest');
 
       // 伴侣面板（Mod+Alt+J）：待办/天气/音乐/记忆/快捷/内容/朗读 + 拖拽即问 + 截图

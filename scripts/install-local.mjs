@@ -6,7 +6,7 @@
  *   node scripts/install-local.mjs --profile web
  *   node scripts/install-local.mjs --profile desktop
  *
- * 只做三件事：pnpm link → 改 profile package.json 的 dsh.profile.bundles → 打印下一步。
+ * 安装后用增强版替换原版 bundle，避免同时注册桌宠服务。
  * 不重启 DSH、不改用户配置、不写任何密钥。
  */
 import { execFileSync } from 'node:child_process';
@@ -43,12 +43,21 @@ if (!Array.isArray(bundles)) {
   console.error('[install-local] profile package.json 缺少 dsh.profile.bundles');
   process.exit(1);
 }
+const oldPet = bundles.indexOf('dsh-pet');
+let changed = oldPet !== -1;
+if (oldPet !== -1) {
+  bundles.splice(oldPet, 1);
+  console.log('[install-local] 已从 bundles 移除冲突的 dsh-pet（依赖仍保留，可回退）');
+}
 if (!bundles.includes('dsh-pet-plus')) {
   bundles.push('dsh-pet-plus');
-  writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+  changed = true;
   console.log('[install-local] 已把 dsh-pet-plus 加到 bundles 末尾');
 } else {
   console.log('[install-local] bundles 已包含 dsh-pet-plus');
+}
+if (changed) {
+  writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
 }
 
 console.log(`
@@ -58,5 +67,5 @@ console.log(`
   3. 验证：
        curl -s http://127.0.0.1:51769/plugins/dsh-pet-plus/client.js | head -c 80
        curl -s http://127.0.0.1:51769/dsh-pet-plus/config | head -c 80
-  4. 设置 → 桌宠配置 / 桌宠 Plus；快捷键 Mod+Alt+K / Mod+Alt+J。
+  4. 设置 → 桌宠配置 / 桌宠 Plus；快捷键 Mod+Alt+U / Mod+Alt+J。
 `);

@@ -40,7 +40,7 @@ describe('「打开网站」按宿主形态自动分派', () => {
     );
   });
 
-  test('helper 主进程：desktop 走 dsh:// 协议，site 保持原行为', () => {
+  test('helper 主进程：优先 dsh:// 唤起程序，协议失败才回落站点', () => {
     assert.ok(
       /const OPEN_TARGET = process\.env\.DSH_PET_OPEN_TARGET === 'desktop' \? 'desktop' : 'site'/.test(main),
       "main.js 必须把非 'desktop' 一律当 'site'（旧宿主 / 独立模式 / 手写 start-desktop 行为不得变）",
@@ -48,17 +48,14 @@ describe('「打开网站」按宿主形态自动分派', () => {
     assert.ok(/openTarget: OPEN_TARGET/.test(main), '形态要沿窗口 query 透到渲染端（文案在那里决定）');
     assert.ok(/shell\.openExternal\('dsh:\/\/open'\)/.test(main), '桌面宿主必须走 dsh://open 唤起应用窗口');
     assert.ok(
-      /OPEN_TARGET === 'desktop'\) \{[\s\S]*?openSite\(url\)/.test(main),
+      /shell\.openExternal\('dsh:\/\/open'\)\.catch\([\s\S]*?openSite\(url\)/.test(main),
       'dsh:// 失败要回落成打开站点（协议未注册时不能"点了没反应"）',
     );
     assert.ok(
       /const openSite = \(url\) => \{[\s\S]*?shell\.openExternal\(target\)/.test(main),
       'site 路径（含回落）必须仍是原来那条打开站点的实现',
     );
-    assert.ok(
-      (main.match(/dsh:\/\/open/g) ?? []).length === 1,
-      'dsh://open 只允许出现在 desktop 分支里（site 形态不得被顺带改成唤起应用）',
-    );
+    assert.equal((main.match(/dsh:\/\/open/g) ?? []).length, 1, 'dsh://open 只允许出现一次');
   });
 
   test('helper 渲染端：文案随形态变，动作名不变', () => {
@@ -67,8 +64,8 @@ describe('「打开网站」按宿主形态自动分派', () => {
       "constants.js 必须从 query 读形态且默认 'site'",
     );
     assert.ok(
-      /label: OPEN_TARGET === 'desktop' \? '打开软件' : '打开网站',\s*action: 'open-site'/.test(sprite),
-      '菜单文案要跟着变，但 action 仍是 open-site（另一端只认这个动作名；hint 只是视觉提示，允许夹在中间换行）',
+      /label: '打开程序',\s*action: 'open-site'/.test(sprite),
+      '菜单文案统一为「打开程序」，action 仍是 open-site（另一端只认这个动作名）',
     );
   });
 

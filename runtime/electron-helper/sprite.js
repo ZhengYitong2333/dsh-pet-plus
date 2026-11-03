@@ -1640,7 +1640,7 @@ class PetSprite {
     // 首项文案随宿主形态变（OPEN_TARGET）：宿主是 DSH 桌面应用时点是"唤起桌面应用窗口"，仍叫「打开网站」会误导
     const tools = [
       {
-        label: OPEN_TARGET === 'desktop' ? '打开软件' : '打开网站',
+        label: '打开程序',
         action: 'open-site',
         hint: OPEN_SHORTCUT_HINT,
       },

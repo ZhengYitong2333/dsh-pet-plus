@@ -23,7 +23,7 @@ let cache: { at: number; city: string; data: WeatherResult } | undefined;
 
 export async function getWeather(city: string): Promise<WeatherResult> {
   const name = String(city ?? '').trim();
-  if (!name) return { ok: false, message: '未配置城市（设置 → 陪伴 → 天气城市）' };
+  if (!name) return { ok: false, message: '未配置城市（设置 → 桌宠 Plus → 天气城市）' };
   if (cache && cache.city === name && Date.now() - cache.at < CACHE_MS) return cache.data;
   try {
     const geo = (await fetch(

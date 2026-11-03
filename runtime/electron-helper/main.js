@@ -1028,16 +1028,12 @@ app.whenReady().then(() => {
 
   ipcMain.on('pet:open-site', (event, payload) => {
     const url = payload && typeof payload === 'object' ? String(payload.url || '') : '';
-    if (!/^https?:[/][/]/.test(url)) return;
-    if (OPEN_TARGET === 'desktop') {
-      // 协议未注册（绿色版 / 注册表被清）时回落成打开站点，至少不是"点了没反应"
-      shell.openExternal('dsh://open').catch((error) => {
-        console.error('[dsh-pet-desktop-helper] open dsh:// failed, falling back to site:', error);
-        openSite(url);
-      });
-      return;
-    }
-    openSite(url);
+    // 菜单项统一叫「打开程序」：优先用 dsh:// 协议唤起已有桌面窗口（不新起进程、不继承
+    // ELECTRON_RUN_AS_NODE）；协议没注册时才回落到浏览器打开站点。
+    shell.openExternal('dsh://open').catch((error) => {
+      console.error('[dsh-pet-desktop-helper] open dsh:// failed, falling back to site:', error);
+      if (/^https?:[/][/]/.test(url)) openSite(url);
+    });
   });
 
   // 显示器热更新：分辨率/缩放变化、插拔屏、旋转都会让桌面几何失效。原先几何只在
