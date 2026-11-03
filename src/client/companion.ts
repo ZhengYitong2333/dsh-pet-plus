@@ -43,12 +43,12 @@ function css(): string {
   background:rgba(24,28,38,.92);color:#c7d2fe;font-size:20px;cursor:pointer;box-shadow:0 8px 28px rgba(0,0,0,.35);
   backdrop-filter:blur(10px);transition:transform .15s ease,background .15s ease}
 #${ROOT_ID} .dpp-btn:hover{transform:translateY(-2px);background:rgba(49,46,129,.92)}
-#${ROOT_ID} .dpp-panel{position:absolute;right:0;bottom:54px;width:min(380px,86vw);max-height:min(560px,72vh);pointer-events:auto;
+#${ROOT_ID} .dpp-panel{position:fixed;left:18px;right:auto;bottom:96px;width:min(380px,86vw);max-height:min(560px,72vh);pointer-events:auto;
   display:flex;flex-direction:column;background:rgba(20,24,34,.97);border:1px solid rgba(129,140,248,.28);
   border-radius:16px;box-shadow:0 18px 60px rgba(0,0,0,.5);backdrop-filter:blur(16px);overflow:hidden}
 #${ROOT_ID} .dpp-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px 6px;cursor:move;user-select:none}
 #${ROOT_ID} .dpp-title{font-size:12px;letter-spacing:.4px;color:#a5b4fc}
-#${ROOT_ID} .dpp-x{cursor:pointer;color:#94a3b8;padding:2px 6px;border-radius:6px}
+#${ROOT_ID} .dpp-x{cursor:pointer;color:#94a3b8;padding:4px 8px;border-radius:6px;font-size:14px;line-height:1}
 #${ROOT_ID} .dpp-x:hover{background:rgba(148,163,184,.15);color:#fff}
 #${ROOT_ID} .dpp-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:0 8px 8px}
 #${ROOT_ID} .dpp-tab{padding:5px 6px;border-radius:8px;border:1px solid transparent;background:transparent;
@@ -108,6 +108,7 @@ function esc(value: string): string {
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch('/dsh-pet-plus' + path, {
     ...init,
+    signal: init?.signal ?? AbortSignal.timeout(8000),
     headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
   });
   const raw = (await res.json().catch(() => null)) as T | null;
@@ -391,10 +392,19 @@ export function installCompanion(ctx: Context): () => void {
 
   button?.addEventListener('click', () => toggle());
   root.querySelector<HTMLButtonElement>('.dpp-cam')?.addEventListener('click', () => void captureScreenshot());
-  root.querySelector('.dpp-x')?.addEventListener('click', () => {
+  const hidePanel = (): void => {
     if (panel) panel.hidden = true;
     stopTimer();
+  };
+  // 事件委托：X 里以后加图标/子元素也不会点不到；再兜一层，防止元素级监听丢失。
+  root.addEventListener('click', (event) => {
+    if ((event.target as HTMLElement | null)?.closest('.dpp-x')) {
+      event.preventDefault();
+      event.stopPropagation();
+      hidePanel();
+    }
   });
+  panel?.addEventListener('mousedown', (event) => event.stopPropagation());
   root.querySelectorAll<HTMLButtonElement>('.dpp-tab').forEach((el) => {
     el.addEventListener('click', () => {
       const tab = el.dataset.tab as Tab | undefined;
