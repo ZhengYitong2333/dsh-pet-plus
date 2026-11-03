@@ -15,7 +15,7 @@
   <img alt="status" src="https://img.shields.io/badge/status-WIP-orange">
 </p>
 
-> ✅ **v0.1.0**：四层记忆、快捷键三候选、微信 / QQ、内容副驾、P1/P2 陪伴功能与伴侣面板已可用；实机平台适配仍按[路线图](#-roadmap)继续打磨。
+> ✅ **v0.1.2**：四层记忆、快捷键三候选、微信 / QQ、内容副驾、P1/P2 陪伴功能与伴侣面板已可用；伴侣面板加载态已加超时/重试兜底，安装与发布文档、插件市场元数据已收口。实机平台评论选择器仍需登录后复核，见[路线图](#-roadmap)。
 
 ---
 
@@ -154,7 +154,13 @@ node scripts/install-local.mjs --profile web
 # node scripts/install-local.mjs --profile desktop
 ```
 
-重启 DSH 后刷新页面。手动安装、验证与卸载见 [安装与加载](docs/install.md)。
+重启 DSH 后刷新页面，再用启动日志里的带 token URL 做一次服务端冒烟：
+
+```bash
+pnpm verify:web --url "http://127.0.0.1:51769/?token=..."
+```
+
+手动安装、验证与卸载见 [安装与加载](docs/install.md)。
 
 > 需要 Node.js ≥ 22.13；首次安装依赖走 `registry.npmmirror.com`（可在 `.npmrc` 改）。
 
@@ -232,7 +238,10 @@ flowchart TB
 - [x] P6 音乐 / 快捷启动 / TTS / 记忆时间线（伴侣面板）
   - [x] 灵动岛：顶部状态胶囊，待办倒计时 / 工作状态 / 音乐 / 记忆条数
 - [x] P7 全局热键（桌面 Helper，候选小窗 + 剪贴板）
-- [ ] P7 Live2D/VRM、插件市场、内容平台选择器实机校准
+- [x] P7 插件市场元数据、安装 / 发布文档、Web profile 服务端冒烟脚本
+  - [x] 抖音推荐流 / 小红书探索页 feed 选择器实机诊断；`check:selectors` 支持按域名自动选页
+  - [ ] 登录态评论输入/发送选择器实机复核（需要真实账号）
+- [ ] P7 Live2D/VRM
 
 ---
 

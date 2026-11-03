@@ -48,8 +48,9 @@ function css(): string {
   border-radius:16px;box-shadow:0 18px 60px rgba(0,0,0,.5);backdrop-filter:blur(16px);overflow:hidden}
 #${ROOT_ID} .dpp-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px 6px;cursor:move;user-select:none}
 #${ROOT_ID} .dpp-title{font-size:12px;letter-spacing:.4px;color:#a5b4fc}
-#${ROOT_ID} .dpp-x{cursor:pointer;color:#94a3b8;padding:4px 8px;border-radius:6px;font-size:14px;line-height:1}
-#${ROOT_ID} .dpp-x:hover{background:rgba(148,163,184,.15);color:#fff}
+#${ROOT_ID} .dpp-head-actions{display:flex;align-items:center;gap:2px}
+#${ROOT_ID} .dpp-x,#${ROOT_ID} .dpp-refresh{cursor:pointer;color:#94a3b8;padding:4px 8px;border-radius:6px;font-size:14px;line-height:1}
+#${ROOT_ID} .dpp-x:hover,#${ROOT_ID} .dpp-refresh:hover{background:rgba(148,163,184,.15);color:#fff}
 #${ROOT_ID} .dpp-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:0 8px 8px}
 #${ROOT_ID} .dpp-tab{padding:5px 6px;border-radius:8px;border:1px solid transparent;background:transparent;
   color:#94a3b8;cursor:pointer;font-size:11px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -105,15 +106,41 @@ function esc(value: string): string {
   return String(value).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c] as string);
 }
 
+const API_TIMEOUT_MS = 8000;
+
+/** 统一请求：显式 AbortController + 定时器，兼容没有 AbortSignal.timeout 的旧内核；
+ *  超时/断线/非 JSON 都给出可读错误，调用方据此渲染错误态而不是永远停在「加载中」。 */
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch('/dsh-pet-plus' + path, {
-    ...init,
-    signal: init?.signal ?? AbortSignal.timeout(8000),
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
-  });
-  const raw = (await res.json().catch(() => null)) as T | null;
-  if (raw === null) throw new Error('服务没有返回 JSON');
-  return raw;
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  const outer = init?.signal;
+  const forwardAbort = (): void => controller.abort();
+  if (outer) {
+    if (outer.aborted) controller.abort();
+    else outer.addEventListener('abort', forwardAbort, { once: true });
+  }
+  try {
+    const res = await fetch('/dsh-pet-plus' + path, {
+      ...init,
+      signal: controller.signal,
+      headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
+    });
+    const raw = (await res.json().catch(() => null)) as T | null;
+    if (raw === null) throw new Error(`服务返回 ${res.status}，响应不是 JSON`);
+    if (res.status >= 500) {
+      const message = (raw as { message?: string } | null)?.message;
+      throw new Error(message ?? `服务返回 ${res.status}`);
+    }
+    return raw;
+  } catch (error) {
+    if (controller.signal.aborted && !(outer?.aborted ?? false)) {
+      throw new Error(`请求超时（${API_TIMEOUT_MS / 1000} 秒），请稍后重试`);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+    outer?.removeEventListener('abort', forwardAbort);
+  }
 }
 
 
@@ -175,12 +202,13 @@ export function installCompanion(ctx: Context): () => void {
   ensureStyle();
   const root = document.createElement('div');
   root.id = ROOT_ID;
-  root.dataset.build = '0.1.1';
+  root.dataset.build = '0.1.2';
   root.innerHTML =
     '<button class="dpp-btn" type="button" title="伴侣面板（Mod+Alt+J）">✦</button>' +
     '<button class="dpp-btn dpp-cam" type="button" title="截图并复制，粘贴到对话里让我看" style="margin-right:6px;font-size:16px">📷</button>' +
     '<div class="dpp-panel" hidden>' +
-    '<div class="dpp-head"><span class="dpp-title">大肥鱼 · 伴侣面板</span><span class="dpp-x" title="关闭 (Esc)">✕</span></div>' +
+    '<div class="dpp-head"><span class="dpp-title">大肥鱼 · 伴侣面板</span><span class="dpp-head-actions">' +
+    '<span class="dpp-refresh" title="重新加载当前 tab">↻</span><span class="dpp-x" title="关闭 (Esc)">✕</span></span></div>' +
     '<div class="dpp-tabs">' +
     TABS.map((t) => `<button class="dpp-tab" data-tab="${t.id}" type="button">${t.label}</button>`).join('') +
     '</div><div class="dpp-body"><div class="dpp-dim">加载中…</div></div></div>';
@@ -192,6 +220,9 @@ export function installCompanion(ctx: Context): () => void {
   const head = root.querySelector<HTMLDivElement>('.dpp-head');
   let current: Tab | undefined;
   let timer: number | undefined;
+  /** 每次切 tab 自增：过期请求的错误/看门狗不再覆盖当前 tab。 */
+  let renderSeq = 0;
+  let renderWatchdog: number | undefined;
 
   // 面板可拖动：位置存 localStorage；双击标题栏回到默认位置。
   const POS_KEY = 'dsh-pet-plus:panel-pos';
@@ -256,26 +287,50 @@ export function installCompanion(ctx: Context): () => void {
   const setTab = (tab: Tab): void => {
     current = tab;
     stopTimer();
+    if (renderWatchdog !== undefined) window.clearTimeout(renderWatchdog);
+    renderWatchdog = undefined;
+    const seq = ++renderSeq;
     root.querySelectorAll<HTMLButtonElement>('.dpp-tab').forEach((el) => {
       el.classList.toggle('on', el.dataset.tab === tab);
     });
     if (!body) return;
     body.innerHTML = '<div class="dpp-dim">加载中…</div>';
     const fail = (error: unknown): void => {
-      if (!body) return;
-      body.innerHTML = `<div class="dpp-err">${esc(error instanceof Error ? error.message : String(error))}</div>`;
+      if (!body || seq !== renderSeq) return;
+      if (renderWatchdog !== undefined) window.clearTimeout(renderWatchdog);
+      renderWatchdog = undefined;
+      const message = error instanceof Error ? error.message : String(error);
+      body.innerHTML =
+        `<div class="dpp-err">${esc(message)}</div>` +
+        `<div class="dpp-actions"><button class="dpp-chip" type="button" id="dpp-retry">重试</button></div>`;
+      body.querySelector('#dpp-retry')?.addEventListener('click', () => setTab(tab));
     };
-    if (tab === 'todo') void renderTodo(body, fail);
-    if (tab === 'weather') void renderWeather(body, fail);
+    // renderX 既可能是同步抛错，也可能返回一个永不 settle 的 Promise：
+    // 统一 catch + 看门狗，保证「加载中…」不会成为终态。
+    const run = (render: () => void | Promise<void>): void => {
+      try {
+        void Promise.resolve(render()).catch(fail);
+      } catch (error) {
+        fail(error);
+      }
+    };
+    renderWatchdog = window.setTimeout(() => {
+      if (seq !== renderSeq) return;
+      if (body.querySelector('.dpp-dim')?.textContent?.includes('加载中')) {
+        fail(new Error('加载超时（服务没有响应），点重试或切个 tab'));
+      }
+    }, API_TIMEOUT_MS + 1500);
+    if (tab === 'todo') run(() => renderTodo(body, fail));
+    if (tab === 'weather') run(() => renderWeather(body, fail));
     if (tab === 'music') {
-      void renderMusic(body, fail);
-      timer = window.setInterval(() => void renderMusic(body, fail), 5000);
+      run(() => renderMusic(body, fail));
+      timer = window.setInterval(() => run(() => renderMusic(body, fail)), 5000);
     }
-    if (tab === 'memory') void renderMemory(body, fail);
-    if (tab === 'quick') void renderQuick(body, fail);
-    if (tab === 'content') void renderContent(body, fail);
-    if (tab === 'speak') void renderSpeak(body, fail);
-    if (tab === 'focus') renderFocus(body, fail);
+    if (tab === 'memory') run(() => renderMemory(body, fail));
+    if (tab === 'quick') run(() => renderQuick(body, fail));
+    if (tab === 'content') run(() => renderContent(body, fail));
+    if (tab === 'speak') run(() => renderSpeak(body, fail));
+    if (tab === 'focus') run(() => renderFocus(body, fail));
   };
 
   // ---- 番茄钟：状态挂在面板实例上，切 tab / 关面板都不丢 ----
@@ -396,13 +451,22 @@ export function installCompanion(ctx: Context): () => void {
   const hidePanel = (): void => {
     if (panel) panel.hidden = true;
     stopTimer();
+    if (renderWatchdog !== undefined) window.clearTimeout(renderWatchdog);
+    renderWatchdog = undefined;
   };
   // 事件委托：X 里以后加图标/子元素也不会点不到；再兜一层，防止元素级监听丢失。
   root.addEventListener('click', (event) => {
-    if ((event.target as HTMLElement | null)?.closest('.dpp-x')) {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('.dpp-x')) {
       event.preventDefault();
       event.stopPropagation();
       hidePanel();
+      return;
+    }
+    if (target?.closest('.dpp-refresh')) {
+      event.preventDefault();
+      event.stopPropagation();
+      setTab(current ?? 'todo');
     }
   });
   panel?.addEventListener('mousedown', (event) => event.stopPropagation());
@@ -423,7 +487,13 @@ export function installCompanion(ctx: Context): () => void {
   };
   window.addEventListener('keydown', onKey, true);
   const onOpenCompanion = (): void => {
-    if (panel && panel.hidden) toggle('todo');
+    if (!panel) return;
+    if (panel.hidden) {
+      toggle('todo');
+      return;
+    }
+    // 已经开着：快捷键再按一次 = 重新加载当前 tab（卡在「加载中」时的逃生口）。
+    setTab(current ?? 'todo');
   };
   window.addEventListener('dsh-pet-plus:open-companion', onOpenCompanion);
 

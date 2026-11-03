@@ -2,7 +2,8 @@
 #
 # id 必须全局唯一且与包名一致（DSH 商城预检按它比对 entry id）；
 # name 解析包入口 lib/index.js；package.json 的 dsh.client 让 DSH 同时把
-# 本包扫描为浏览器插件，提供 /plugins/dsh-pet-plus/client.js。
+# 本包扫描为浏览器插件，按 /plugins/??dsh-pet-plus/client.js&rev=<hash> 的组合
+# URL 下发（裸 /plugins/dsh-pet-plus/client.js 不带 rev，会 404，属正常现象）。
 - insert:
     - id: dsh-pet-plus
       name: 'dsh-pet-plus'

@@ -99,6 +99,10 @@
 先按上面的命令带着调试端口启动 Chrome 并登录，然后：
 
 ```bash
+# 先看看调试 Chrome 里有哪些页面
+pnpm check:selectors --port 9222 --list
+
+# 脚本会按域名自动挑 douyin.com / xiaohongshu.com 的标签页
 pnpm check:selectors --port 9222 --platform douyin
 pnpm check:selectors --port 9222 --platform xhs
 ```
@@ -110,7 +114,18 @@ pnpm check:selectors --port 9222 --platform xhs
   `src/host/content/platforms.ts`，再跑一次；
 - `-1`：选择器语法错误。
 
-脚本只读 DOM，不滚动、不点击、不发送。
+脚本只读 DOM，不滚动、不点击、不发送。`--platform all` 会分别找每个平台自己的
+标签页，不会把抖音的结果当成小红书。
+
+**2026-11-03 实机诊断记录**（macOS Chrome 156，未登录）：
+
+| 平台 | 页面 | feedCards | commentButton | commentInput / submitButton |
+|---|---|---|---|---|
+| 抖音 | `douyin.com/?recommend=1` | ✓ 9–10（`data-e2e=feed-video`） | ✓ 2（`feed-comment-icon`） | 未登录不出输入框（点评论弹手机号登录） |
+| 小红书 | `xiaohongshu.com/explore` | ✓ 27–30（`section.note-item`） | 未验证（评论需打开详情） | 未登录点笔记会跳 404/登录异常页 |
+
+评论输入与发送按钮必须在**已登录**的调试 Chrome 里再跑一次；未登录时的 0 命中不代表
+选择器失效。验证时建议先保持 `dryRun: true`。
 
 ---
 

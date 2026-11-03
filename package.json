@@ -1,6 +1,6 @@
 {
   "name": "dsh-pet-plus",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "会记住你的桌宠：四层长期记忆、微信/QQ 双通道、抖音/小红书内容副驾、快捷键三候选。基于 dsh-pet 的独立 DSH 插件。",
   "icon": "assets/logo.png",
   "keywords": [
@@ -70,9 +70,13 @@
     "prepack": "npm run build && node scripts/prepack-check.js && npm run check:secrets",
     "start:desktop": "node scripts/start-desktop.mjs",
     "gen:preview": "node scripts/gen-preview.mjs",
-    "check:selectors": "node --experimental-strip-types scripts/check-selectors.mjs"
+    "check:selectors": "node --experimental-strip-types scripts/check-selectors.mjs",
+    "verify:web": "node scripts/verify-web.mjs"
   },
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=22.13.0"
   },

@@ -13,7 +13,7 @@
   <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <img alt="DSH" src="https://img.shields.io/badge/DSH-0.2.1--rc.3-7c3aed">
   <img alt="platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey">
-  <img alt="status" src="https://img.shields.io/badge/version-0.1.0-informational">
+  <img alt="status" src="https://img.shields.io/badge/version-0.1.2-informational">
 </p>
 
 > [中文说明](README.md)

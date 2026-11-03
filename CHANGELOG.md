@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.1.2
+
+伴侣面板加载态兜底、选择器实机诊断与发布/安装文档收口。
+
+### 伴侣面板
+
+- `api()` 改用显式 `AbortController` + 8 秒定时器，不再依赖 `AbortSignal.timeout`；
+  超时、非 JSON、5xx 都会给出可读错误。
+- 每个 tab 的渲染加看门狗与重试：同步异常、永不 settle 的 Promise 都不会让面板
+  永远停在「加载中…」；切 tab 后旧请求的错误不会覆盖新 tab。
+- 标题栏新增 ↻ 刷新；面板已打开时再按 `Mod+Alt+J` 会重载当前 tab。
+
+### 内容平台
+
+- `pnpm check:selectors` 支持 `--list`，并按平台域名自动选择正确的标签页；
+  `--platform all` 不再把抖音页面当成小红书。
+- 抖音推荐流与小红书探索页的 feed 选择器完成实机诊断；未登录时评论输入框不出现
+  属预期，诊断记录写入 `docs/setup-content.md`。
+
+### 发布与安装
+
+- 新增 `pnpm verify:web --url "<带 token 的 DSH URL>"`：从 `__DSH_BOOT__` 取真实
+  组合 URL，验证浏览器半侧与宿主路由，避免裸 `/plugins/.../client.js` 的 404 误判。
+- `docs/install.md` 更新 Web profile 启动/验证/排障；`docs/publishing.md` 更新商城
+  元数据（`publishConfig`、`icon`、兼容版本）与发布后验证步骤。
+- `install-local.mjs` 输出改为 `verify:web` 与正确快捷键。
+
+## 0.1.1
+
+- 修复伴侣面板关闭按钮的事件委托与 API 超时，面板默认位置避开桌宠。
+- 修复桌面端程序菜单、宿主截图回退、面板拖拽与待办编辑。
+- 版本号与 `root.dataset.build` 对齐到 0.1.1。
+
 ## 0.1.0
 
 首个可用版本：在 dsh-pet 的桌面陪伴之上，补齐记忆、主动建议、IM 与内容副驾。

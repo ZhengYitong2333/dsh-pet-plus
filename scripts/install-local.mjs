@@ -64,8 +64,7 @@ console.log(`
 下一步：
   1. 重启 DSH（或退出后重新打开 DeepSeek Harness）；
   2. 浏览器打开当前 GUI 后刷新页面；
-  3. 验证：
-       curl -s http://127.0.0.1:51769/plugins/dsh-pet-plus/client.js | head -c 80
-       curl -s http://127.0.0.1:51769/dsh-pet-plus/config | head -c 80
-  4. 设置 → 桌宠配置 / 桌宠 Plus；快捷键 Mod+Alt+U / Mod+Alt+J。
+  3. 验证（用 DSH 启动时打印的完整 URL，带 token）：
+       node scripts/verify-web.mjs --url "http://127.0.0.1:51769/?token=..."
+  4. 设置 → 桌宠配置 / 桌宠 Plus；伴侣面板 Mod+Alt+J，三候选 Mod+Alt+K。
 `);

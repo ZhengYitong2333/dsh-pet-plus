@@ -7,11 +7,14 @@
 ```jsonc
 {
   "name": "dsh-pet-plus",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "…",
   "license": "MIT",
+  "publishConfig": { "access": "public" },
+  "icon": "assets/logo.png",
   "homepage": "https://github.com/ZhengYitong2333/dsh-pet-plus#readme",
   "repository": { "type": "git", "url": "git+https://github.com/ZhengYitong2333/dsh-pet-plus.git" },
+  "bugs": { "url": "https://github.com/ZhengYitong2333/dsh-pet-plus/issues" },
   "engines": { "node": ">=22.13.0" },
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" },
@@ -58,7 +61,8 @@ npm publish --access public
 dsh plugin --profile web add dsh-pet-plus
 ```
 
-再把 `dsh-pet-plus` 加进 `dsh.profile.bundles`，重启 DSH。
+再把 `dsh-pet-plus` 加进 `dsh.profile.bundles`，重启 DSH，然后用
+`pnpm verify:web --url "<DSH 打印的 URL>"` 验证浏览器半侧与宿主路由都在线。
 
 > npm 包名若已被占用，可改用 scope（如 `@yourname/dsh-pet-plus`），
 > 同时把 `cordis.patch.yml` 的 entry `id` 与包名对齐。
