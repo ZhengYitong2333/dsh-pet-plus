@@ -24,6 +24,11 @@ test('client：先 /capture，失败回落 getDisplayMedia；权限失败给 mac
   assert.match(client, /系统设置 → 隐私与安全性 → 屏幕录制/);
 });
 
+test('面板 hidden 必须真正隐藏：.dpp-panel 的 display:flex 会覆盖 UA 的 [hidden]', () => {
+  const client = read('../client/companion.ts');
+  assert.match(client, /\[hidden\]\{display:none !important\}/);
+});
+
 test('右键菜单：文案为「打开程序」，动作走 dsh://open 并回落站点', () => {
   const sprite = read('../../runtime/electron-helper/sprite.js');
   const main = read('../../runtime/electron-helper/main.js');

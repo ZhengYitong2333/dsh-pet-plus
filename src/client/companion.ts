@@ -37,7 +37,8 @@ const TABS: Array<{ id: Tab; label: string }> = [
 
 function css(): string {
   return `
-#${ROOT_ID}{position:fixed;right:18px;bottom:96px;z-index:2147483002;pointer-events:auto;
+#${ROOT_ID}{position:fixed;right:18px;bottom:96px;z-index:2147483002;pointer-events:auto}
+#${ROOT_ID} [hidden]{display:none !important}
   font-family:var(--dsh-pet-font-family,'PingFang SC','Microsoft YaHei',sans-serif);color:#e2e8f0;font-size:13px}
 #${ROOT_ID} .dpp-btn{width:44px;height:44px;border-radius:50%;border:1px solid rgba(129,140,248,.35);
   background:rgba(24,28,38,.92);color:#c7d2fe;font-size:20px;cursor:pointer;box-shadow:0 8px 28px rgba(0,0,0,.35);
