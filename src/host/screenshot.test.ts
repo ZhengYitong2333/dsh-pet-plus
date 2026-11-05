@@ -14,6 +14,7 @@ test('host：/capture 优先 desktopCapturer，非桌面宿主显式 not-desktop
   assert.match(host, /desktopCapturer/);
   assert.match(host, /reason: 'not-desktop'/);
   assert.match(host, /getSources\(\{/);
+  assert.match(host, /screencapture/, 'macOS 需要有系统截图兜底');
 });
 
 test('client：先 /capture，失败回落 getDisplayMedia；权限失败给 macOS 路径', () => {

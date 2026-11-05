@@ -93,10 +93,12 @@
  * TODO(类型)：peer 依赖类型包本地暂不可解析，ctx/req/res 暂用 any；
  *             依赖可解析后替换为 DSH 官方类型。
  */
-import { createReadStream, existsSync, fstatSync, readFileSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, fstatSync, readFileSync, statSync, unlinkSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths';
@@ -326,6 +328,31 @@ function readBody(req: IncomingMessage): Promise<string> {
 // 额外宠物（pet pack）说明：校验/扫描已收敛到 ./config（readAllConfig 内部逐字段合并），
 // 这里不再有 host 侧拷贝——文件宠物与主宠物一样，统一从 readAllConfig 的成品读取。
 // ---------------------------------------------------------------------------
+
+const execFileAsync = promisify(execFile);
+
+/**
+ * macOS 原生截图兜底：Electron 的 desktopCapturer 在部分 DSH 版本里拿不到，
+ * 但系统 `screencapture` 只依赖进程的「屏幕录制」权限，不依赖 Chromium 的 display-capture 策略。
+ * 返回 PNG data URL；失败抛出可读错误。
+ */
+async function captureScreenNative(): Promise<{ dataUrl: string; width: number; height: number }> {
+  const file = join(tmpdir(), `dsh-pet-plus-shot-${Date.now()}-${Math.floor(Math.random() * 1e6)}.png`);
+  try {
+    await execFileAsync('/usr/sbin/screencapture', ['-x', '-m', '-t', 'png', file], { timeout: 8000 });
+    const buf = readFileSync(file);
+    if (buf.length < 24 || buf.toString('ascii', 1, 4) !== 'PNG') throw new Error('截图文件为空');
+    const width = buf.readUInt32BE(16);
+    const height = buf.readUInt32BE(20);
+    return { dataUrl: 'data:image/png;base64,' + buf.toString('base64'), width, height };
+  } finally {
+    try {
+      unlinkSync(file);
+    } catch {
+      /* 文件可能根本没生成 */
+    }
+  }
+}
 
 /** 宿主插件主体：注册 `/dsh-pet-plus` 前缀路由 + 斜杠命令（/balance /pet /chat）。 */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 注入的 ctx（webServer/locale 等 service 无静态类型）
@@ -2249,6 +2276,26 @@ export function apply(ctx: any): void {
           obj: { ok: true, dataUrl: image.toDataURL(), width: size.width, height: size.height },
         };
       } catch (error) {
+        // Electron 模块拿不到 / desktopCapturer 被禁用时，macOS 用系统 screencapture 兜底。
+        if (process.platform === 'darwin') {
+          try {
+            const shot = await captureScreenNative();
+            return { kind: 'json', status: 200, obj: { ok: true, ...shot } };
+          } catch (fallbackError) {
+            return {
+              kind: 'json',
+              status: 200,
+              obj: {
+                ok: false,
+                reason: 'capture-failed',
+                message:
+                  '截图失败：' +
+                  (fallbackError instanceof Error ? fallbackError.message : String(fallbackError)) +
+                  '（请到 系统设置 → 隐私与安全性 → 屏幕录制 勾选 DeepSeek Harness）',
+              },
+            };
+          }
+        }
         return {
           kind: 'json',
           status: 200,
