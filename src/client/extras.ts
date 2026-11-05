@@ -5,31 +5,37 @@
 import type { FunctionComponent } from 'react';
 
 const cardStyle = {
-  border: '1px solid var(--dsw-alias-border-secondary, #334155)',
-  borderRadius: 12,
-  padding: '14px 16px',
-  marginBottom: 12,
-  background: 'var(--dsw-alias-bg-secondary, #1e293b)',
+  border: '1px solid rgba(148,163,184,.16)',
+  borderRadius: 16,
+  padding: '16px 18px',
+  marginBottom: 14,
+  background: 'rgba(255,255,255,.035)',
+  backdropFilter: 'blur(14px)',
+  WebkitBackdropFilter: 'blur(14px)',
+  boxShadow: '0 14px 40px rgba(0,0,0,.18)',
 };
-const labelStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, margin: '8px 0' };
+const labelStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, margin: '9px 0', fontSize: 13 };
 const inputStyle = {
   width: '100%',
   boxSizing: 'border-box' as const,
-  padding: '8px 10px',
-  borderRadius: 8,
-  border: '1px solid var(--dsw-alias-border-secondary, #475569)',
-  background: 'var(--dsw-alias-bg-primary, #0f172a)',
-  color: 'var(--dsw-alias-text-primary, #e2e8f0)',
-  fontSize: 13,
+  height: 34,
+  padding: '0 10px',
+  borderRadius: 10,
+  border: '1px solid rgba(148,163,184,.22)',
+  background: 'rgba(12,17,26,.45)',
+  color: '#e8edf7',
+  fontSize: 12.5,
+  outline: 'none',
 };
 const btnStyle = {
-  padding: '6px 12px',
-  borderRadius: 8,
-  border: '1px solid var(--dsw-alias-border-secondary, #475569)',
-  background: 'var(--dsw-alias-bg-primary, #0f172a)',
-  color: 'var(--dsw-alias-text-primary, #e2e8f0)',
+  height: 34,
+  padding: '0 14px',
+  borderRadius: 10,
+  border: '1px solid rgba(148,163,184,.22)',
+  background: 'rgba(255,255,255,.06)',
+  color: '#e8edf7',
   cursor: 'pointer',
-  fontSize: 12,
+  fontSize: 12.5,
 };
 
 function splitList(value: string): string[] {
@@ -339,7 +345,7 @@ export function makeExtrasSection(react: {
 
     return h(
       'div',
-      { style: { maxWidth: 720 } },
+      { style: { maxWidth: 700 } },
       h('h2', { style: { fontSize: 16, margin: '0 0 12px' } }, '桌宠 Plus'),
       h(
         'section',

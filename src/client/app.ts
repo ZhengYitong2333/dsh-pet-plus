@@ -11,6 +11,8 @@ import { installSectionNavIcon } from './nav-icon';
 import { installSuggest } from './suggest';
 import { installCompanion } from './companion';
 import { installIsland } from './island';
+import { installTheme } from './ui-theme';
+import { installAutoReload } from './auto-reload';
 import { makeExtrasSection } from './extras';
 import type * as ReactNS from 'react';
 import type * as PrimitivesNS from '@deepseek-ai/dsh-client-ui-primitives';
@@ -70,6 +72,10 @@ export function makeFactory(): (require: (mod: string) => any) => any {
     const inject = ['slots', 'locale', 'connection', 'remote', 'remote.commands', 'commandUi', 'sessions', 'conversation'];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 注入的 ctx（locale/slots/webServer 等 service 无静态类型）
     function apply(ctx: any) {
+      // 统一视觉层：圆角 / 磨砂 / 半透明（面板、设置页、弹层共用变量）
+      installTheme();
+      // 开发期热更新：lib/client.js 变化后页面自动刷新（不用重启 DSH）
+      ctx.effect(() => installAutoReload(), 'dsh-pet-plus: auto reload');
       // 本地化字典（设置页文案）
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-pet: dictionaries');
       const t = ctx.locale.bind(NS);

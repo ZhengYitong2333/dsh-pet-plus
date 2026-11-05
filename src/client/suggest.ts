@@ -38,22 +38,25 @@ function ensureStyle(): void {
   const style = document.createElement('style');
   style.dataset.pluginCss = STYLE_ID;
   style.textContent = `
-.${POPUP_ID}{position:fixed;z-index:2147483002;left:50%;top:62%;transform:translate(-50%,-50%);
-  width:min(420px,86vw);background:rgba(24,28,38,.96);color:#eef2ff;border:1px solid rgba(129,140,248,.35);
-  border-radius:16px;box-shadow:0 18px 60px rgba(0,0,0,.45);padding:14px 14px 10px;
-  font-family:var(--dsh-pet-font-family,'PingFang SC','Microsoft YaHei',sans-serif);backdrop-filter:blur(14px);}
-.${POPUP_ID} .h{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#a5b4fc;margin-bottom:8px}
-.${POPUP_ID} .x{cursor:pointer;color:#94a3b8;padding:2px 6px;border-radius:6px}
-.${POPUP_ID} .x:hover{background:rgba(148,163,184,.15);color:#fff}
-.${POPUP_ID} .opt{display:block;width:100%;text-align:left;margin:6px 0;padding:10px 12px;border-radius:10px;
-  border:1px solid rgba(148,163,184,.22);background:rgba(30,41,59,.7);color:#e2e8f0;font-size:13px;line-height:1.45;
-  cursor:pointer;transition:background .15s,border-color .15s}
-.${POPUP_ID} .opt:hover{background:rgba(79,70,229,.28);border-color:rgba(129,140,248,.7)}
-.${POPUP_ID} .opt b{color:#818cf8;margin-right:6px}
-.${POPUP_ID} .foot{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;color:#64748b}
-.${POPUP_ID} .again{cursor:pointer;color:#a5b4fc;padding:3px 8px;border-radius:6px}
-.${POPUP_ID} .again:hover{background:rgba(129,140,248,.15)}
-.${POPUP_ID} .sk{height:38px;margin:6px 0;border-radius:10px;background:linear-gradient(90deg,rgba(148,163,184,.12),rgba(148,163,184,.24),rgba(148,163,184,.12));background-size:200% 100%;animation:dshpetSk 1.2s infinite}
+.${POPUP_ID}{position:fixed;z-index:2147483002;left:50%;top:56%;transform:translate(-50%,-50%);
+  width:min(400px,88vw);padding:14px;border-radius:var(--dpp-radius-lg,20px);
+  background:linear-gradient(160deg,var(--dpp-glass-strong,rgba(18,22,31,.86)),var(--dpp-glass,rgba(22,27,38,.72)));
+  color:var(--dpp-text,#e8edf7);border:1px solid var(--dpp-border,rgba(148,163,184,.2));
+  box-shadow:var(--dpp-shadow,0 24px 70px rgba(0,0,0,.48));backdrop-filter:var(--dpp-blur,blur(20px) saturate(140%));
+  -webkit-backdrop-filter:var(--dpp-blur,blur(20px) saturate(140%));
+  font-family:var(--dsh-pet-font-family,'PingFang SC','Microsoft YaHei',sans-serif);font-size:13px}
+.${POPUP_ID} .h{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#b9c0ff;margin-bottom:10px;font-weight:600}
+.${POPUP_ID} .x{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--dpp-muted,#9aa7bd);border-radius:8px}
+.${POPUP_ID} .x:hover{background:rgba(255,255,255,.1);color:#fff}
+.${POPUP_ID} .opt{display:flex;gap:9px;align-items:flex-start;width:100%;text-align:left;margin:7px 0;padding:10px 12px;
+  border-radius:var(--dpp-radius-md,14px);border:1px solid rgba(148,163,184,.14);background:rgba(255,255,255,.045);
+  color:#dfe5ef;font-size:12.5px;line-height:1.5;cursor:pointer;transition:background .15s ease,border-color .15s ease}
+.${POPUP_ID} .opt:hover{background:rgba(139,149,255,.16);border-color:rgba(139,149,255,.5)}
+.${POPUP_ID} .opt b{color:#aab2ff;font-weight:700;min-width:12px}
+.${POPUP_ID} .foot{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px;color:#78869d}
+.${POPUP_ID} .again{cursor:pointer;color:#b9c0ff;padding:4px 9px;border-radius:8px}
+.${POPUP_ID} .again:hover{background:rgba(139,149,255,.14)}
+.${POPUP_ID} .sk{height:40px;margin:7px 0;border-radius:12px;background:linear-gradient(90deg,rgba(148,163,184,.10),rgba(148,163,184,.20),rgba(148,163,184,.10));background-size:200% 100%;animation:dshpetSk 1.2s infinite}
 @keyframes dshpetSk{0%{background-position:200% 0}100%{background-position:-200% 0}}
 `;
   document.head.appendChild(style);

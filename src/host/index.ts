@@ -93,7 +93,7 @@
  * TODO(类型)：peer 依赖类型包本地暂不可解析，ctx/req/res 暂用 any；
  *             依赖可解析后替换为 DSH 官方类型。
  */
-import { createReadStream, existsSync, fstatSync, readFileSync } from 'node:fs';
+import { createReadStream, existsSync, fstatSync, readFileSync, statSync } from 'node:fs';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
@@ -2199,6 +2199,21 @@ export function apply(ctx: any): void {
       return { kind: 'json', status: ok ? 200 : 400, obj: { ok } };
     }
 
+
+    // 客户端构建版本：浏览器半侧轮询它，发现 lib/client.js 变化就自动刷新，开发时无需重启 DSH。
+    if (rest === 'build') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let mtime = 0;
+      let size = 0;
+      try {
+        const st = statSync(join(PACKAGE_ROOT, 'lib', 'client.js'));
+        mtime = Math.round(st.mtimeMs);
+        size = st.size;
+      } catch {
+        /* 源码直跑时没有 lib/client.js：rev=0，客户端会跳过 */
+      }
+      return { kind: 'json', status: 200, obj: { ok: true, rev: `${mtime}:${size}`, mtime, size } };
+    }
 
     // 截图：桌面宿主用 Electron desktopCapturer（主屏），避免浏览器 getDisplayMedia 在
     // DSH 窗口里被权限策略直接拒掉；dsh web 下返回 ok:false，由前端回落到 getDisplayMedia。
