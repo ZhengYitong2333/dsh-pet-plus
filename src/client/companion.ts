@@ -159,26 +159,6 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 
-/** 把图片和一句提示直接“粘贴”进 DSH 当前输入框；找不到输入框返回 false。 */
-function pasteScreenshotIntoComposer(blob: Blob): boolean {
-  try {
-    const candidates = Array.from(
-      document.querySelectorAll<HTMLElement>('textarea, [contenteditable="true"], [contenteditable=""]'),
-    ).filter((el) => !el.closest(`#${ROOT_ID}`) && el.getClientRects().length > 0);
-    const target = candidates[candidates.length - 1];
-    if (!target) return false;
-    target.focus();
-    const data = new DataTransfer();
-    data.setData('text/plain', '解释这张截图');
-    data.items.add(new File([blob], `screenshot-${Date.now()}.png`, { type: 'image/png' }));
-    const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data });
-    target.dispatchEvent(event);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function toast(text: string, kind: 'ok' | 'err' = 'ok'): void {
   ensureStyle();
   const node = document.createElement('div');
@@ -219,9 +199,7 @@ export function installCompanion(ctx: Context): () => void {
   root.id = ROOT_ID;
   root.dataset.build = '0.1.2';
   root.innerHTML =
-    '<button class="dpp-btn dpp-pet" type="button" title="展示桌宠（网页 + 桌面）">🐟</button>' +
-    '<button class="dpp-btn" type="button" title="伴侣面板（Mod+Alt+J）">✦</button>' +
-    '<button class="dpp-btn dpp-cam" type="button" title="截图并复制，粘贴到对话里让我看" style="font-size:16px">📷</button>' +
+    '<button class="dpp-btn dpp-pet" type="button" title="展示桌宠（双击打开伴侣面板）">🐟</button>' +
     '<div class="dpp-panel" hidden>' +
     '<div class="dpp-head"><span class="dpp-title">大肥鱼 · 伴侣面板</span><span class="dpp-head-actions">' +
     '<span class="dpp-refresh" title="重新加载当前 tab">↻</span><span class="dpp-x" title="关闭 (Esc)">✕</span></span></div>' +
@@ -462,8 +440,32 @@ export function installCompanion(ctx: Context): () => void {
     } else stopTimer();
   };
 
-  button?.addEventListener('click', () => toggle());
-  root.querySelector<HTMLButtonElement>('.dpp-cam')?.addEventListener('click', () => void captureScreenshot());
+  // 展示按钮：把桌宠从「隐藏 / 仅桌面」拉回网页（display=both），不需要进设置页。
+  async function showPet(): Promise<void> {
+    try {
+      const cfg = await api<{ main?: { pets?: Array<{ id?: string; display?: string }> } }>('/config');
+      const pet = (cfg.main?.pets ?? []).find((p) => p?.id);
+      if (!pet?.id) {
+        toast('配置里没有桌宠，先到设置里添加一只', 'err');
+        return;
+      }
+      if (pet.display === 'web' || pet.display === 'both') {
+        toast('桌宠已经在展示了');
+        return;
+      }
+      const res = await api<{ ok?: boolean; reason?: string; message?: string }>('/pet-display', {
+        method: 'POST',
+        body: JSON.stringify({ id: pet.id, display: 'both' }),
+      });
+      if (res.ok) toast('已展示桌宠（网页 + 桌面）');
+      else toast('展示失败：' + (res.message ?? res.reason ?? '未知原因'), 'err');
+    } catch (error) {
+      toast('展示失败：' + (error instanceof Error ? error.message : String(error)), 'err');
+    }
+  }
+
+  button?.addEventListener('click', () => void showPet());
+  button?.addEventListener('dblclick', () => toggle());
   const hidePanel = (): void => {
     if (panel) panel.hidden = true;
     stopTimer();
@@ -514,86 +516,6 @@ export function installCompanion(ctx: Context): () => void {
   window.addEventListener('dsh-pet-plus:open-companion', onOpenCompanion);
 
   // ---- 截图：抓一帧并复制到剪贴板；解释由 DSH 对话里的多模态模型完成 ----
-  /** 桌面宿主优先走主进程 desktopCapturer；失败/浏览器再回落到 getDisplayMedia。 */
-  async function captureBlob(): Promise<{ blob: Blob; via: 'host' | 'display' }> {
-    try {
-      const res = await api<{ ok?: boolean; dataUrl?: string; message?: string }>('/capture', { method: 'POST' });
-      if (res.ok && res.dataUrl) {
-        const blob = await (await fetch(res.dataUrl)).blob();
-        if (blob.size > 0) return { blob, via: 'host' };
-      }
-    } catch {
-      /* 回落 */
-    }
-    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-    try {
-      const track = stream.getVideoTracks()[0];
-      const video = document.createElement('video');
-      video.srcObject = stream;
-      await video.play();
-      await new Promise((r) => window.setTimeout(r, 220));
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
-      if (!blob) throw new Error('截图编码失败');
-      return { blob, via: 'display' };
-    } finally {
-      stream.getTracks().forEach((t) => t.stop());
-    }
-  }
-
-  async function captureScreenshot(): Promise<void> {
-    try {
-      const { blob } = await captureBlob();
-      // 先复制，保证失败时还有退路
-      if (navigator.clipboard && 'write' in navigator.clipboard && typeof ClipboardItem !== 'undefined') {
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-      }
-      // 再尝试直接粘进 DSH 输入框：DSH 自己会把图片交给多模态模型，等于一键“截图解释”。
-      if (pasteScreenshotIntoComposer(blob)) {
-        toast('截图已放进输入框，按回车我就开始看图解释。');
-        return;
-      }
-      toast('截图已复制。在对话输入框粘贴并回车，我就能看图解释。');
-    } catch (error) {
-      const name = error instanceof Error ? error.name : '';
-      const message =
-        name === 'NotAllowedError' || name === 'PermissionDeniedError'
-          ? '系统未允许屏幕录制。macOS：系统设置 → 隐私与安全性 → 屏幕录制，勾选 DeepSeek Harness 后重启；浏览器：允许共享屏幕。'
-          : '截图失败：' + (error instanceof Error ? error.message : String(error));
-      toast(message, 'err');
-    }
-  }
-
-  // 展示按钮：把桌宠从「隐藏 / 仅桌面」拉回网页（display=both），不需要进设置页。
-  async function showPet(): Promise<void> {
-    try {
-      const cfg = await api<{ main?: { pets?: Array<{ id?: string; display?: string }> } }>('/config');
-      const pets = cfg.main?.pets ?? [];
-      const pet = pets.find((p) => p?.id) ?? undefined;
-      if (!pet?.id) {
-        toast('配置里没有桌宠，先到设置里添加一只', 'err');
-        return;
-      }
-      if (pet.display === 'web' || pet.display === 'both') {
-        toast('桌宠已经在展示了');
-        return;
-      }
-      const res = await api<{ ok?: boolean; reason?: string; message?: string }>('/pet-display', {
-        method: 'POST',
-        body: JSON.stringify({ id: pet.id, display: 'both' }),
-      });
-      if (res.ok) toast('已展示桌宠（网页 + 桌面）');
-      else toast('展示失败：' + (res.message ?? res.reason ?? '未知原因'), 'err');
-    } catch (error) {
-      toast('展示失败：' + (error instanceof Error ? error.message : String(error)), 'err');
-    }
-  }
-
-  root.querySelector<HTMLButtonElement>('.dpp-pet')?.addEventListener('click', () => void showPet());
-
   // ---- 拖拽 / 剪贴板「即问」 ----
   let askNode: HTMLDivElement | undefined;
   function closeAsk(): void {

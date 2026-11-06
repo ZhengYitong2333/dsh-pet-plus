@@ -17,12 +17,12 @@ test('host：/capture 优先 desktopCapturer，非桌面宿主显式 not-desktop
   assert.match(host, /screencapture/, 'macOS 需要有系统截图兜底');
 });
 
-test('client：先 /capture，失败回落 getDisplayMedia；权限失败给 macOS 路径', () => {
+test('client：只保留 🐟 展示按钮，不再挂截图/面板浮动按钮', () => {
   const client = read('../client/companion.ts');
-  assert.match(client, /api<\{ ok\?: boolean; dataUrl\?: string; message\?: string \}>\('\/capture'/);
-  assert.match(client, /getDisplayMedia/);
-  assert.match(client, /NotAllowedError/);
-  assert.match(client, /系统设置 → 隐私与安全性 → 屏幕录制/);
+  assert.match(client, /dpp-pet/);
+  assert.doesNotMatch(client, /dpp-cam/);
+  assert.doesNotMatch(client, /getDisplayMedia/);
+  assert.doesNotMatch(client, /dpp-btn[^']*'>✦/);
 });
 
 test('展示按钮：一键把桌宠 display 改成 both', () => {
