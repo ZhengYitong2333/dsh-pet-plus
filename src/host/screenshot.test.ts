@@ -25,6 +25,13 @@ test('client：先 /capture，失败回落 getDisplayMedia；权限失败给 mac
   assert.match(client, /系统设置 → 隐私与安全性 → 屏幕录制/);
 });
 
+test('展示按钮：一键把桌宠 display 改成 both', () => {
+  const client = read('../client/companion.ts');
+  assert.match(client, /dpp-pet/);
+  assert.match(client, /'\/pet-display'/);
+  assert.match(client, /display: 'both'/);
+});
+
 test('面板 hidden 必须真正隐藏：.dpp-panel 的 display:flex 会覆盖 UA 的 [hidden]', () => {
   const client = read('../client/companion.ts');
   assert.match(client, /\[hidden\]\{display:none !important\}/);

@@ -37,7 +37,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
 
 function css(): string {
   return `
-#${ROOT_ID}{position:fixed;right:18px;bottom:96px;z-index:2147483002;pointer-events:auto;
+#${ROOT_ID}{position:fixed;right:18px;bottom:96px;z-index:2147483002;pointer-events:auto;display:flex;gap:6px;align-items:center;
   font-family:var(--dsh-pet-font-family,'PingFang SC','Microsoft YaHei',sans-serif);color:var(--dpp-text,#e8edf7);font-size:13px}
 #${ROOT_ID} [hidden]{display:none !important}
 #${ROOT_ID} .dpp-btn{width:46px;height:46px;border-radius:50%;border:1px solid var(--dpp-border,rgba(148,163,184,.2));
@@ -219,8 +219,9 @@ export function installCompanion(ctx: Context): () => void {
   root.id = ROOT_ID;
   root.dataset.build = '0.1.2';
   root.innerHTML =
+    '<button class="dpp-btn dpp-pet" type="button" title="展示桌宠（网页 + 桌面）">🐟</button>' +
     '<button class="dpp-btn" type="button" title="伴侣面板（Mod+Alt+J）">✦</button>' +
-    '<button class="dpp-btn dpp-cam" type="button" title="截图并复制，粘贴到对话里让我看" style="margin-right:6px;font-size:16px">📷</button>' +
+    '<button class="dpp-btn dpp-cam" type="button" title="截图并复制，粘贴到对话里让我看" style="font-size:16px">📷</button>' +
     '<div class="dpp-panel" hidden>' +
     '<div class="dpp-head"><span class="dpp-title">大肥鱼 · 伴侣面板</span><span class="dpp-head-actions">' +
     '<span class="dpp-refresh" title="重新加载当前 tab">↻</span><span class="dpp-x" title="关闭 (Esc)">✕</span></span></div>' +
@@ -565,6 +566,33 @@ export function installCompanion(ctx: Context): () => void {
       toast(message, 'err');
     }
   }
+
+  // 展示按钮：把桌宠从「隐藏 / 仅桌面」拉回网页（display=both），不需要进设置页。
+  async function showPet(): Promise<void> {
+    try {
+      const cfg = await api<{ main?: { pets?: Array<{ id?: string; display?: string }> } }>('/config');
+      const pets = cfg.main?.pets ?? [];
+      const pet = pets.find((p) => p?.id) ?? undefined;
+      if (!pet?.id) {
+        toast('配置里没有桌宠，先到设置里添加一只', 'err');
+        return;
+      }
+      if (pet.display === 'web' || pet.display === 'both') {
+        toast('桌宠已经在展示了');
+        return;
+      }
+      const res = await api<{ ok?: boolean; reason?: string; message?: string }>('/pet-display', {
+        method: 'POST',
+        body: JSON.stringify({ id: pet.id, display: 'both' }),
+      });
+      if (res.ok) toast('已展示桌宠（网页 + 桌面）');
+      else toast('展示失败：' + (res.message ?? res.reason ?? '未知原因'), 'err');
+    } catch (error) {
+      toast('展示失败：' + (error instanceof Error ? error.message : String(error)), 'err');
+    }
+  }
+
+  root.querySelector<HTMLButtonElement>('.dpp-pet')?.addEventListener('click', () => void showPet());
 
   // ---- 拖拽 / 剪贴板「即问」 ----
   let askNode: HTMLDivElement | undefined;
