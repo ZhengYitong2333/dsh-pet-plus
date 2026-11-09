@@ -25,11 +25,12 @@ test('client：只保留 🐟 展示按钮，不再挂截图/面板浮动按钮'
   assert.doesNotMatch(client, /dpp-btn[^']*'>✦/);
 });
 
-test('展示按钮：一键把桌宠 display 改成 both', () => {
+test('展示按钮：仅在 none 时打开，默认 desktop；已打开状态原样沿用', () => {
   const client = read('../client/companion.ts');
   assert.match(client, /dpp-pet/);
   assert.match(client, /'\/pet-display'/);
-  assert.match(client, /display: 'both'/);
+  assert.match(client, /display: 'desktop'/);
+  assert.match(client, /pet\.display === 'desktop'/);
 });
 
 test('面板 hidden 必须真正隐藏：.dpp-panel 的 display:flex 会覆盖 UA 的 [hidden]', () => {

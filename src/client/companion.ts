@@ -37,7 +37,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
 
 function css(): string {
   return `
-#${ROOT_ID}{position:fixed;right:18px;bottom:96px;z-index:2147483002;pointer-events:auto;display:flex;gap:6px;align-items:center;
+#${ROOT_ID}{position:fixed;left:18px;top:50%;transform:translateY(-50%);right:auto;bottom:auto;z-index:2147483002;pointer-events:auto;display:flex;gap:6px;align-items:center;
   font-family:var(--dsh-pet-font-family,'PingFang SC','Microsoft YaHei',sans-serif);color:var(--dpp-text,#e8edf7);font-size:13px}
 #${ROOT_ID} [hidden]{display:none !important}
 #${ROOT_ID} .dpp-btn{width:46px;height:46px;border-radius:50%;border:1px solid var(--dpp-border,rgba(148,163,184,.2));
@@ -45,6 +45,8 @@ function css(): string {
   box-shadow:0 12px 34px rgba(0,0,0,.38);backdrop-filter:var(--dpp-blur,blur(20px));
   -webkit-backdrop-filter:var(--dpp-blur,blur(20px));transition:transform .16s ease,background .16s ease}
 #${ROOT_ID} .dpp-btn:hover{transform:translateY(-2px);background:rgba(79,70,229,.55);border-color:rgba(139,149,255,.55)}
+#${ROOT_ID} .dpp-btn{cursor:grab;touch-action:none}
+#${ROOT_ID} .dpp-btn:active{cursor:grabbing}
 #${ROOT_ID} .dpp-panel{position:fixed;left:18px;right:auto;bottom:96px;width:min(380px,86vw);max-height:min(560px,72vh);pointer-events:auto;
   display:flex;flex-direction:column;overflow:hidden;border-radius:var(--dpp-radius-lg,20px);
   background:linear-gradient(160deg,var(--dpp-glass-strong,rgba(18,22,31,.86)),var(--dpp-glass,rgba(22,27,38,.72)));
@@ -449,22 +451,78 @@ export function installCompanion(ctx: Context): () => void {
         toast('配置里没有桌宠，先到设置里添加一只', 'err');
         return;
       }
-      if (pet.display === 'web' || pet.display === 'both') {
-        toast('桌宠已经在展示了');
+      // 已经开着（网页 / 桌面 / 两者）就沿用原状态，绝不因为点一下按钮就改 display。
+      if (pet.display === 'web' || pet.display === 'both' || pet.display === 'desktop') {
+        const where = pet.display === 'both' ? '网页 + 桌面' : pet.display === 'web' ? '网页' : '桌面';
+        toast('桌宠已经在' + where + '展示了');
         return;
       }
+      // 只有「完全隐藏」才重新打开；默认按桌面打开（用户明确要求默认桌面）。
       const res = await api<{ ok?: boolean; reason?: string; message?: string }>('/pet-display', {
         method: 'POST',
-        body: JSON.stringify({ id: pet.id, display: 'both' }),
+        body: JSON.stringify({ id: pet.id, display: 'desktop' }),
       });
-      if (res.ok) toast('已展示桌宠（网页 + 桌面）');
+      if (res.ok) toast('已展示桌宠（桌面）');
       else toast('展示失败：' + (res.message ?? res.reason ?? '未知原因'), 'err');
     } catch (error) {
       toast('展示失败：' + (error instanceof Error ? error.message : String(error)), 'err');
     }
   }
 
-  button?.addEventListener('click', () => void showPet());
+  // 鱼按钮可拖动：换位置后记住；拖动结束的那次 click 不触发展示。
+  const FISH_KEY = 'dsh-pet-plus:fish-pos';
+  const applyFishPos = (left: number, top: number): void => {
+    root.style.transform = 'none';
+    root.style.right = 'auto';
+    root.style.bottom = 'auto';
+    root.style.left = Math.max(4, Math.min(left, window.innerWidth - 52)) + 'px';
+    root.style.top = Math.max(4, Math.min(top, window.innerHeight - 52)) + 'px';
+  };
+  try {
+    const saved = JSON.parse(localStorage.getItem(FISH_KEY) ?? 'null') as { left?: number; top?: number } | null;
+    if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) applyFishPos(saved.left as number, saved.top as number);
+  } catch {
+    /* 用默认位置 */
+  }
+  let suppressFishClick = false;
+  button?.addEventListener('mousedown', (event) => {
+    if (event.button !== 0) return;
+    const start = root.getBoundingClientRect();
+    const sx = event.clientX;
+    const sy = event.clientY;
+    let moved = false;
+    const move = (e: MouseEvent): void => {
+      const dx = e.clientX - sx;
+      const dy = e.clientY - sy;
+      if (!moved && Math.hypot(dx, dy) < 4) return;
+      moved = true;
+      applyFishPos(start.left + dx, start.top + dy);
+    };
+    const up = (): void => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      if (!moved) return;
+      suppressFishClick = true;
+      window.setTimeout(() => (suppressFishClick = false), 260);
+      const final = root.getBoundingClientRect();
+      try {
+        localStorage.setItem(FISH_KEY, JSON.stringify({ left: final.left, top: final.top }));
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+    event.preventDefault();
+  });
+  button?.addEventListener('click', (event) => {
+    if (suppressFishClick) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    void showPet();
+  });
   button?.addEventListener('dblclick', () => toggle());
   const hidePanel = (): void => {
     if (panel) panel.hidden = true;

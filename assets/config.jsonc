@@ -291,7 +291,7 @@
       // 余额/碎碎念/工作状态事件动画、点击回应与拖拽一律照常——用户主动触发的不受此限制。
       // 设置页有同名勾选框。改动后刷新或重启生效。
       "fixedEnabled": false,
-      "display": "both",
+      "display": "desktop",
       "position": {
         "corner": "top-right",
         "marginX": 24,
