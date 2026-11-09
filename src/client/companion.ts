@@ -14,7 +14,13 @@ import { insertIntoLatestSession } from './suggest';
 const ROOT_ID = 'dsh-pet-plus-companion';
 const STYLE_ID = 'dsh-pet-plus/companion.css';
 
-type Tab = 'todo' | 'weather' | 'music' | 'memory' | 'quick' | 'content' | 'speak' | 'focus';
+type Tab = 'settings' | 'display' | 'chat';
+
+const TABS: Array<{ id: Tab; label: string }> = [
+  { id: 'settings', label: '设置' },
+  { id: 'display', label: '显示位置' },
+  { id: 'chat', label: '聊天' },
+];
 
 interface TodoItem {
   id: string;
@@ -24,20 +30,15 @@ interface TodoItem {
   dueAt?: number;
 }
 
-const TABS: Array<{ id: Tab; label: string }> = [
-  { id: 'todo', label: '待办' },
-  { id: 'weather', label: '天气' },
-  { id: 'music', label: '音乐' },
-  { id: 'memory', label: '记忆' },
-  { id: 'quick', label: '快捷' },
-  { id: 'content', label: '内容' },
-  { id: 'speak', label: '朗读' },
-  { id: 'focus', label: '专注' },
-];
+interface PetLite {
+  id: string;
+  name?: string;
+  display?: string;
+}
 
 function css(): string {
   return `
-#${ROOT_ID}{position:fixed;left:18px;top:50%;transform:translateY(-50%);right:auto;bottom:auto;z-index:2147483002;pointer-events:auto;display:flex;gap:6px;align-items:center;
+#${ROOT_ID}{position:fixed;left:18px;top:calc(50% - 23px);right:auto;bottom:auto;z-index:2147483002;pointer-events:auto;display:flex;gap:6px;align-items:center;
   font-family:var(--dsh-pet-font-family,'PingFang SC','Microsoft YaHei',sans-serif);color:var(--dpp-text,#e8edf7);font-size:13px}
 #${ROOT_ID} [hidden]{display:none !important}
 #${ROOT_ID} .dpp-btn{width:46px;height:46px;border-radius:50%;border:1px solid var(--dpp-border,rgba(148,163,184,.2));
@@ -47,7 +48,7 @@ function css(): string {
 #${ROOT_ID} .dpp-btn:hover{transform:translateY(-2px);background:rgba(79,70,229,.55);border-color:rgba(139,149,255,.55)}
 #${ROOT_ID} .dpp-btn{cursor:grab;touch-action:none}
 #${ROOT_ID} .dpp-btn:active{cursor:grabbing}
-#${ROOT_ID} .dpp-panel{position:fixed;left:18px;right:auto;bottom:96px;width:min(380px,86vw);max-height:min(560px,72vh);pointer-events:auto;
+#${ROOT_ID} .dpp-panel{position:fixed;left:78px;right:auto;bottom:96px;width:min(380px,86vw);max-height:min(560px,72vh);pointer-events:auto;
   display:flex;flex-direction:column;overflow:hidden;border-radius:var(--dpp-radius-lg,20px);
   background:linear-gradient(160deg,var(--dpp-glass-strong,rgba(18,22,31,.86)),var(--dpp-glass,rgba(22,27,38,.72)));
   border:1px solid var(--dpp-border,rgba(148,163,184,.2));box-shadow:var(--dpp-shadow,0 24px 70px rgba(0,0,0,.48));
@@ -58,7 +59,7 @@ function css(): string {
 #${ROOT_ID} .dpp-x,#${ROOT_ID} .dpp-refresh{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;
   cursor:pointer;color:var(--dpp-muted,#9aa7bd);border-radius:8px;font-size:14px;line-height:1;transition:background .15s ease,color .15s ease}
 #${ROOT_ID} .dpp-x:hover,#${ROOT_ID} .dpp-refresh:hover{background:rgba(255,255,255,.10);color:#fff}
-#${ROOT_ID} .dpp-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;padding:0 12px 10px}
+#${ROOT_ID} .dpp-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:0 12px 10px}
 #${ROOT_ID} .dpp-tab{height:30px;padding:0 6px;border-radius:10px;border:1px solid transparent;background:transparent;
   color:var(--dpp-muted,#9aa7bd);cursor:pointer;font-size:11.5px;text-align:center;white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis;transition:background .15s ease,color .15s ease,border-color .15s ease}
@@ -97,6 +98,20 @@ function css(): string {
   border:1px solid var(--dpp-border,rgba(148,163,184,.2));background:rgba(255,255,255,.055);color:#d7deeb;
   cursor:pointer;font-size:12px;transition:background .15s ease,border-color .15s ease}
 #${ROOT_ID} .dpp-chip:hover{background:rgba(139,149,255,.16);border-color:rgba(139,149,255,.55);color:#fff}
+#${ROOT_ID} .dpp-seg{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:4px;border-radius:12px;
+  background:rgba(12,17,26,.38);border:1px solid rgba(148,163,184,.14);margin:2px 0 8px}
+#${ROOT_ID} .dpp-seg button{height:30px;border:0;border-radius:9px;background:transparent;color:var(--dpp-muted,#9aa7bd);
+  font-size:11.5px;cursor:pointer;transition:background .15s ease,color .15s ease}
+#${ROOT_ID} .dpp-seg button:hover{background:rgba(255,255,255,.07);color:#e8edf7}
+#${ROOT_ID} .dpp-seg button.on{background:linear-gradient(180deg,rgba(99,102,241,.55),rgba(79,70,229,.38));
+  color:#fff;border:1px solid rgba(139,149,255,.45)}
+#${ROOT_ID} .dpp-chat{display:flex;flex-direction:column;gap:8px;min-height:200px}
+#${ROOT_ID} .dpp-msgs{display:flex;flex-direction:column;gap:7px;max-height:300px;overflow:auto;padding:2px 1px 4px}
+#${ROOT_ID} .dpp-msg{max-width:86%;padding:8px 11px;border-radius:13px;font-size:12.5px;line-height:1.5;
+  white-space:pre-wrap;word-break:break-word;border:1px solid rgba(148,163,184,.14)}
+#${ROOT_ID} .dpp-msg.user{align-self:flex-end;background:rgba(99,102,241,.34);border-color:rgba(139,149,255,.42);color:#f2f4ff}
+#${ROOT_ID} .dpp-msg.pet{align-self:flex-start;background:rgba(255,255,255,.05);color:#e6ebf5}
+#${ROOT_ID} .dpp-msg.typing{opacity:.65;font-style:italic}
 #${ROOT_ID} .dpp-err{color:#fca5a5;font-size:12px;margin:6px 0;line-height:1.5}
 #${ROOT_ID} .dpp-ok{color:#86efac;font-size:12px;margin:6px 0}
 #dsh-pet-plus-ask{position:fixed;z-index:2147483003;width:min(360px,84vw);padding:14px;border-radius:var(--dpp-radius-md,14px);
@@ -316,17 +331,9 @@ export function installCompanion(ctx: Context): () => void {
         fail(new Error('加载超时（服务没有响应），点重试或切个 tab'));
       }
     }, API_TIMEOUT_MS + 1500);
-    if (tab === 'todo') run(() => renderTodo(body, fail));
-    if (tab === 'weather') run(() => renderWeather(body, fail));
-    if (tab === 'music') {
-      run(() => renderMusic(body, fail));
-      timer = window.setInterval(() => run(() => renderMusic(body, fail)), 5000);
-    }
-    if (tab === 'memory') run(() => renderMemory(body, fail));
-    if (tab === 'quick') run(() => renderQuick(body, fail));
-    if (tab === 'content') run(() => renderContent(body, fail));
-    if (tab === 'speak') run(() => renderSpeak(body, fail));
-    if (tab === 'focus') run(() => renderFocus(body, fail));
+    if (tab === 'settings') run(() => renderSettings(body, fail));
+    if (tab === 'display') run(() => renderDisplay(body, fail));
+    if (tab === 'chat') run(() => renderChat(body, fail));
   };
 
   // ---- 番茄钟：状态挂在面板实例上，切 tab / 关面板都不丢 ----
@@ -429,7 +436,7 @@ export function installCompanion(ctx: Context): () => void {
     void fail;
   };
 
-  const toggle = (tab: Tab = current ?? 'todo'): void => {
+  const toggle = (tab: Tab = current ?? 'settings'): void => {
     if (!panel) return;
     panel.hidden = !panel.hidden;
     if (!panel.hidden) {
@@ -472,7 +479,6 @@ export function installCompanion(ctx: Context): () => void {
   // 鱼按钮可拖动：换位置后记住；拖动结束的那次 click 不触发展示。
   const FISH_KEY = 'dsh-pet-plus:fish-pos';
   const applyFishPos = (left: number, top: number): void => {
-    root.style.transform = 'none';
     root.style.right = 'auto';
     root.style.bottom = 'auto';
     root.style.left = Math.max(4, Math.min(left, window.innerWidth - 52)) + 'px';
@@ -542,7 +548,7 @@ export function installCompanion(ctx: Context): () => void {
     if (target?.closest('.dpp-refresh')) {
       event.preventDefault();
       event.stopPropagation();
-      setTab(current ?? 'todo');
+      setTab(current ?? 'settings');
     }
   });
   panel?.addEventListener('mousedown', (event) => event.stopPropagation());
@@ -565,11 +571,11 @@ export function installCompanion(ctx: Context): () => void {
   const onOpenCompanion = (): void => {
     if (!panel) return;
     if (panel.hidden) {
-      toggle('todo');
+      toggle('settings');
       return;
     }
     // 已经开着：快捷键再按一次 = 重新加载当前 tab（卡在「加载中」时的逃生口）。
-    setTab(current ?? 'todo');
+    setTab(current ?? 'settings');
   };
   window.addEventListener('dsh-pet-plus:open-companion', onOpenCompanion);
 
@@ -707,6 +713,206 @@ export function installCompanion(ctx: Context): () => void {
 // ======================= tab 渲染 =======================
 
 type Fail = (error: unknown) => void;
+
+/** 当前主宠物 + display（三个新视图共用）。 */
+async function currentPet(): Promise<PetLite | undefined> {
+  const cfg = await api<{ main?: { pets?: PetLite[] } }>('/config');
+  return (cfg.main?.pets ?? []).find((p) => p?.id);
+}
+
+async function renderDisplay(body: HTMLDivElement, fail: Fail): Promise<void> {
+  const pet = await currentPet().catch((e) => {
+    fail(e);
+    return undefined;
+  });
+  if (!pet) return;
+  const options: Array<[string, string]> = [
+    ['desktop', '仅桌面'],
+    ['web', '仅网页'],
+    ['both', '两者'],
+    ['none', '隐藏'],
+  ];
+  body.innerHTML =
+    '<div class="dpp-dim">桌宠显示在哪里？切换后立即生效。</div>' +
+    `<div class="dpp-seg">${options
+      .map(
+        ([value, label]) =>
+          `<button type="button" data-display="${value}" class="${pet.display === value ? 'on' : ''}">${label}</button>`,
+      )
+      .join('')}</div>` +
+    '<div class="dpp-dim" id="dpp-display-hint"></div>';
+  body.querySelectorAll<HTMLButtonElement>('[data-display]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const value = button.dataset.display ?? 'desktop';
+      if (value === pet.display) return;
+      body.querySelectorAll('[data-display]').forEach((el) => el.classList.toggle('on', el === button));
+      const hint = body.querySelector<HTMLDivElement>('#dpp-display-hint');
+      if (hint) hint.textContent = '正在切换…';
+      void api<{ ok?: boolean; reason?: string; message?: string }>('/pet-display', {
+        method: 'POST',
+        body: JSON.stringify({ id: pet.id, display: value }),
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error(res.message ?? res.reason ?? '切换失败');
+          pet.display = value;
+          if (hint) hint.textContent = '已切换到「' + (options.find(([v]) => v === value)?.[1] ?? value) + '」';
+        })
+        .catch((error) => {
+          if (hint) hint.textContent = '切换失败：' + (error instanceof Error ? error.message : String(error));
+        });
+    });
+  });
+}
+
+function renderMessage(role: 'user' | 'pet', text: string): HTMLDivElement {
+  const node = document.createElement('div');
+  node.className = 'dpp-msg ' + role;
+  node.textContent = text;
+  return node;
+}
+
+async function renderChat(body: HTMLDivElement, fail: Fail): Promise<void> {
+  const pet = await currentPet().catch((e) => {
+    fail(e);
+    return undefined;
+  });
+  if (!pet) return;
+  body.innerHTML =
+    '<div class="dpp-chat"><div class="dpp-msgs"><div class="dpp-dim">正在读取对话…</div></div>' +
+    '<div class="dpp-add"><input type="text" id="dpp-chat-input" placeholder="和桌宠说点什么…" />' +
+    '<button class="dpp-primary" type="button" id="dpp-chat-send">发送</button></div></div>';
+  const msgs = body.querySelector<HTMLDivElement>('.dpp-msgs');
+  const input = body.querySelector<HTMLInputElement>('#dpp-chat-input');
+  const sendBtn = body.querySelector<HTMLButtonElement>('#dpp-chat-send');
+  if (!msgs || !input || !sendBtn) return;
+  const stick = (): void => {
+    msgs.scrollTop = msgs.scrollHeight;
+  };
+  try {
+    const history = await api<{ messages?: Array<{ role: string; content: string }> }>(
+      '/chat?pet=' + encodeURIComponent(pet.id) + '&rounds=20',
+    );
+    msgs.innerHTML = '';
+    for (const message of history.messages ?? []) {
+      msgs.appendChild(renderMessage(message.role === 'user' ? 'user' : 'pet', message.content));
+    }
+    if ((history.messages ?? []).length === 0) {
+      msgs.innerHTML = '<div class="dpp-dim">还没有对话，说第一句吧。</div>';
+    }
+    stick();
+  } catch (error) {
+    msgs.innerHTML = `<div class="dpp-err">${esc(error instanceof Error ? error.message : String(error))}</div>`;
+  }
+  const send = async (): Promise<void> => {
+    const text = input.value.trim();
+    if (!text || sendBtn.disabled) return;
+    input.value = '';
+    sendBtn.disabled = true;
+    msgs.appendChild(renderMessage('user', text));
+    const typing = renderMessage('pet', '正在想…');
+    typing.classList.add('typing');
+    msgs.appendChild(typing);
+    stick();
+    try {
+      const res = await api<{ ok?: boolean; text?: string; message?: string; reason?: string }>(
+        '/chat?pet=' + encodeURIComponent(pet.id) + '&surface=web',
+        { method: 'POST', body: JSON.stringify({ text }) },
+      );
+      if (!res.ok || !res.text) throw new Error(res.message ?? res.reason ?? '生成失败');
+      typing.classList.remove('typing');
+      typing.textContent = res.text;
+    } catch (error) {
+      typing.classList.remove('typing');
+      typing.textContent = '（失败：' + (error instanceof Error ? error.message : String(error)) + '）';
+    } finally {
+      sendBtn.disabled = false;
+      stick();
+      input.focus();
+    }
+  };
+  sendBtn.addEventListener('click', () => void send());
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      void send();
+    }
+  });
+}
+
+function openDshSettings(): boolean {
+  const row = document.querySelector<HTMLElement>('[class*="triggerRow"]');
+  if (!row) return false;
+  try {
+    // triggerRow 本身是容器，真正带 onClick 的通常是里面的按钮/头像。
+    const target = row.querySelector<HTMLElement>('button, [role="button"], img') ?? row;
+    const pointer = { bubbles: true, button: 0, buttons: 1, pointerId: 1, isPrimary: true } as const;
+    target.dispatchEvent(new PointerEvent('pointerdown', pointer));
+    target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, buttons: 1 }));
+    target.dispatchEvent(new PointerEvent('pointerup', { ...pointer, buttons: 0 }));
+    target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
+    target.click();
+    window.setTimeout(() => {
+      const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"], button, [role="button"], div')];
+      const hit = items.find(
+        (el) => el.offsetParent !== null && /^(设置|Settings)$/i.test((el.innerText || '').trim()),
+      );
+      if (hit) {
+        hit.click();
+        return;
+      }
+      // 兜底：DSH 设置快捷键（通常是 Mod+,）
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ',', code: 'Comma', metaKey: true, ctrlKey: true, bubbles: true }),
+      );
+    }, 260);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function renderSettings(body: HTMLDivElement, fail: Fail): Promise<void> {
+  const cfg = await api<{
+    main?: { memory?: { enabled?: boolean }; p1?: { weather?: { city?: string } } };
+  }>('/config').catch((e) => {
+    fail(e);
+    return undefined;
+  });
+  if (!cfg) return;
+  const memoryOn = cfg.main?.memory?.enabled !== false;
+  const city = cfg.main?.p1?.weather?.city ?? '';
+  body.innerHTML =
+    '<div class="dpp-dim">体验设置（完整配置在 DSH 设置 → 桌宠 / 桌宠 Plus）</div>' +
+    '<label class="dpp-row" style="cursor:pointer"><span class="dpp-grow">长期记忆注入</span>' +
+    '<input type="checkbox" id="dpp-set-memory" ' + (memoryOn ? 'checked' : '') + ' /></label>' +
+    '<div class="dpp-add"><input type="text" id="dpp-set-city" placeholder="天气城市，例如：北京" value="' +
+    esc(city) +
+    '" /></div>' +
+    '<div class="dpp-actions"><button class="dpp-primary" type="button" id="dpp-set-save">保存</button>' +
+    '<button class="dpp-chip" type="button" id="dpp-set-open">打开 DSH 设置</button></div>' +
+    '<div class="dpp-dim" id="dpp-set-msg"></div>';
+  const msg = body.querySelector<HTMLDivElement>('#dpp-set-msg');
+  body.querySelector('#dpp-set-save')?.addEventListener('click', () => {
+    const memory = body.querySelector<HTMLInputElement>('#dpp-set-memory')?.checked ?? true;
+    const cityValue = body.querySelector<HTMLInputElement>('#dpp-set-city')?.value ?? '';
+    if (msg) msg.textContent = '正在保存…';
+    void api<{ ok?: boolean }>('/settings/extras', {
+      method: 'PUT',
+      body: JSON.stringify({ memory: { enabled: memory }, p1: { weather: { city: cityValue } } }),
+    })
+      .then((res) => {
+        if (msg) msg.textContent = res.ok ? '已保存' : '保存失败';
+      })
+      .catch((error) => {
+        if (msg) msg.textContent = '保存失败：' + (error instanceof Error ? error.message : String(error));
+      });
+  });
+  body.querySelector('#dpp-set-open')?.addEventListener('click', () => {
+    if (!openDshSettings() && msg) msg.textContent = '没找到设置入口，请点左下角头像 → 设置';
+  });
+}
+
+
 
 async function renderTodo(body: HTMLDivElement, fail: Fail): Promise<void> {
   const data = await api<{ ok?: boolean; tasks?: TodoItem[] }>('/todo').catch((e) => {

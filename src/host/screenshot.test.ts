@@ -25,6 +25,13 @@ test('client：只保留 🐟 展示按钮，不再挂截图/面板浮动按钮'
   assert.doesNotMatch(client, /dpp-btn[^']*'>✦/);
 });
 
+test('新面板：设置 / 显示位置 / 聊天三个入口 + 聊天走 /chat', () => {
+  const client = read('../client/companion.ts');
+  for (const label of ["label: '设置'", "label: '显示位置'", "label: '聊天'"]) assert.match(client, new RegExp(label));
+  assert.match(client, /\/chat\?pet=/);
+  assert.match(client, /data-display/);
+});
+
 test('展示按钮：仅在 none 时打开，默认 desktop；已打开状态原样沿用', () => {
   const client = read('../client/companion.ts');
   assert.match(client, /dpp-pet/);
