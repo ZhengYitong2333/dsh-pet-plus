@@ -536,6 +536,7 @@ export function installCompanion(ctx: Context): () => void {
     if (renderWatchdog !== undefined) window.clearTimeout(renderWatchdog);
     renderWatchdog = undefined;
   };
+  window.addEventListener('dsh-pet-plus:close-panel', hidePanel);
   // 事件委托：X 里以后加图标/子元素也不会点不到；再兜一层，防止元素级监听丢失。
   root.addEventListener('click', (event) => {
     const target = event.target as HTMLElement | null;
@@ -702,6 +703,7 @@ export function installCompanion(ctx: Context): () => void {
     stopPomoTimer();
     disposeShortcut?.();
     window.removeEventListener('keydown', onKey, true);
+    window.removeEventListener('dsh-pet-plus:close-panel', hidePanel);
     window.removeEventListener('dsh-pet-plus:open-companion', onOpenCompanion);
     document.removeEventListener('drop', onDrop, true);
     document.removeEventListener('paste', onPaste, true);
@@ -852,11 +854,19 @@ function openDshSettings(): boolean {
     target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
     target.click();
     window.setTimeout(() => {
-      const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"], button, [role="button"], div')];
-      const hit = items.find(
-        (el) => el.offsetParent !== null && /^(设置|Settings)$/i.test((el.innerText || '').trim()),
+      const items = [...document.querySelectorAll<HTMLElement>('*')].filter(
+        (el) =>
+          el.offsetParent !== null &&
+          !el.closest('#dsh-pet-plus-companion') &&
+          /^(设置|Settings)$/i.test((el.textContent || '').trim()),
       );
+      // 取最内层那个（外层容器 textContent 也等于“设置”）；再按坐标点一次，
+      // 兼容用 pointerdown 而不是 click 打开菜单项的实现。
+      const hit = items.sort((a, b) => a.children.length - b.children.length)[0];
       if (hit) {
+        const rect = hit.getBoundingClientRect();
+        const at = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        (at as HTMLElement | null)?.click();
         hit.click();
         return;
       }
@@ -864,7 +874,7 @@ function openDshSettings(): boolean {
       document.dispatchEvent(
         new KeyboardEvent('keydown', { key: ',', code: 'Comma', metaKey: true, ctrlKey: true, bubbles: true }),
       );
-    }, 260);
+    }, 420);
     return true;
   } catch {
     return false;
@@ -908,7 +918,12 @@ async function renderSettings(body: HTMLDivElement, fail: Fail): Promise<void> {
       });
   });
   body.querySelector('#dpp-set-open')?.addEventListener('click', () => {
-    if (!openDshSettings() && msg) msg.textContent = '没找到设置入口，请点左下角头像 → 设置';
+    if (!openDshSettings()) {
+      if (msg) msg.textContent = '没找到设置入口，请点左下角头像 → 设置';
+      return;
+    }
+    // 设置弹窗是 DSH 自己的模态层，面板留在上面会挡视线；打开后自动收起。
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent('dsh-pet-plus:close-panel')), 500);
   });
 }
 
