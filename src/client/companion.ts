@@ -787,6 +787,13 @@ async function renderChat(body: HTMLDivElement, fail: Fail): Promise<void> {
   const input = body.querySelector<HTMLInputElement>('#dpp-chat-input');
   const sendBtn = body.querySelector<HTMLButtonElement>('#dpp-chat-send');
   if (!msgs || !input || !sendBtn) return;
+  // surface 必须和 display 对齐：桌面宠物只能用 desktop，两者/网页用 web，完全隐藏则无法发送。
+  const surface = pet.display === 'desktop' ? 'desktop' : 'web';
+  if (pet.display === 'none') {
+    msgs.innerHTML = '<div class="dpp-err">桌宠当前是「隐藏」状态，先在「显示位置」里打开再聊天。</div>';
+    input.disabled = true;
+    sendBtn.disabled = true;
+  }
   const stick = (): void => {
     msgs.scrollTop = msgs.scrollHeight;
   };
@@ -817,7 +824,7 @@ async function renderChat(body: HTMLDivElement, fail: Fail): Promise<void> {
     stick();
     try {
       const res = await api<{ ok?: boolean; text?: string; message?: string; reason?: string }>(
-        '/chat?pet=' + encodeURIComponent(pet.id) + '&surface=web',
+        '/chat?pet=' + encodeURIComponent(pet.id) + '&surface=' + surface,
         { method: 'POST', body: JSON.stringify({ text }) },
       );
       if (!res.ok || !res.text) throw new Error(res.message ?? res.reason ?? '生成失败');
